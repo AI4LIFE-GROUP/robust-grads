@@ -1,10 +1,25 @@
 # robust-grads
 
-I will add more documentation (specifically about the user-specified parameter options) when I add to AI4Life
+## Under construction!! 
 
+## Datasets:
+* WHO https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who?resource=download
+* German credit 
+* Adult income
+* COMPAS
+* MNIST
+It is easy to add other tabular datasets, just search for wherever 'german' appears and update the list to include your dataset. Select the correct branches in datasets.load_data depending on if features are binary or continuous. 
 
-To run:
+The code assumes that there exists `<file_base>_train.csv` and `<file_base>_test.csv` files, where `<file_base>` is the second command-line argument and can be, for example, `data/german`. 
+
+## To run:
+The code is broken into two pieces. `baseline_experiments.py` trains 100 neural networks and saves their accuracy (train and test), test-set predictions (binary predictions and logits), and test-set gradients.
+
+The second piece, 
+
 `python3 baseline_experiments.py whobin path_to_data_files --lr=0.2 --lr_decay=0.8 --epochs=10`
+
+### Parameters:
 
 (see full list of parameters in baseline_experiments.py)
 
