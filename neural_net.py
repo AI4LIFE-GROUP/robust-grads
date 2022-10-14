@@ -101,7 +101,7 @@ class CNN(nn.Module):
         return output
 
 class NeuralNetwork(nn.Module):
-    def __init__(self, num_feat, num_classes=2, activation = nn.ReLU(), nodes_per_layer = 5, num_layers = 3):
+    def __init__(self, num_feat, num_classes=2, activation = nn.ReLU(), nodes_per_layer = 5, num_layers = 3, p = 0.0):
         super(NeuralNetwork, self).__init__()
         self.num_feat = num_feat
         self.num_classes = num_classes
@@ -119,6 +119,8 @@ class NeuralNetwork(nn.Module):
             self.stack.add_module("linear"+str(i), nn.Linear(self.nodes_per_layer, self.nodes_per_layer))
             self.stack.add_module("activation"+str(i), self.activation)
         
+        # add a dropout layer 
+        self.stack.add_module("dropout", nn.Dropout(p=p))
         self.stack.add_module("final", nn.Linear(self.nodes_per_layer, self.num_classes))
 
     def forward(self, x):
@@ -141,7 +143,7 @@ def dnn_adversarial(train, test, params, dataset, random_state):
         model = CNN()
     else:
         model = NeuralNetwork(params.num_feat, params.num_classes, params.activation, 
-                          params.nodes_per_layer, params.num_layers)
+                          params.nodes_per_layer, params.num_layers, params.dropout)
 
     if params.optimizer == 'amsgrad':
         optimizer = torch.optim.Adam(model.parameters(), lr=params.learning_rate, amsgrad=True)
@@ -177,7 +179,7 @@ def dnn(train_dataloader, test_dataloader, params, dataset):
         model = CNN()
     else:
         model = NeuralNetwork(params.num_feat, params.num_classes, params.activation, 
-                          params.nodes_per_layer, params.num_layers)
+                          params.nodes_per_layer, params.num_layers, params.dropout)
     epochs = params.epochs
     if params.optimizer == 'amsgrad':
         optimizer = torch.optim.Adam(model.parameters(), lr=params.learning_rate, amsgrad=True)

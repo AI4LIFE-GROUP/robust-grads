@@ -9,7 +9,6 @@ from torch import nn
 import data_utils
 import datasets
 import training
-import adversarial
 
 # LINEAR MODELS - see linear_model.py
 # NEURAL ARCHITECTURE - see neural_net.py
@@ -18,7 +17,7 @@ import adversarial
 def main(args):
     random_states = [x-1 for x in range(100)]
 
-    assert(args.dataset in ['income', 'compas', 'mnist', 'who', 'whobin'])
+    assert(args.dataset in ['income', 'compas', 'mnist', 'who', 'whobin', 'german', 'german_cor'])
 
     if args.dataset in ['income', 'compas', 'who']:
         # check that traintest split is done - if not, create.
@@ -51,20 +50,21 @@ def main(args):
             scaler = data_utils.get_scaler(pd.read_csv(args.file_base + '_train.csv').drop(
                 columns=[args.label_col]), perturb_params, random_state=r)
             scaler_labels = None
-        else: 
+        else:  # if data is already scaled in a preprocessing step, as with german, skip scaling step 
             scaler, scaler_labels = None, None
         
         train, test = datasets.load_data(args.file_base, args.dataset, scaler, scaler_labels, r, perturb_params)
-        if args.dataset in ['income', 'compas', 'who', 'whobin']:
-            num_feat = train.num_features()
-            num_classes = train.num_classes()
-        else: #MNIST
+        if args.dataset in ['mnist']:
+            #MNIST
             num_feat = 28*28
             num_classes = 2
+        else:
+            num_feat = train.num_features()
+            num_classes = train.num_classes()
 
         params = training.Params(args.lr, args.lr_decay, args.epochs, args.batch_size, loss_fn=args.loss, num_feat=num_feat, 
                         num_classes=num_classes, activation=args.activation, nodes_per_layer=args.nodes_per_layer,
-                        num_layers=args.num_layers, optimizer=args.optimizer, seed=seed, epsilon = args.epsilon)
+                        num_layers=args.num_layers, optimizer=args.optimizer, seed=seed, epsilon = args.epsilon, dropout= args.dropout)
         
         if args.linear:
             training.train_linear_models(args, train, test, r)
@@ -114,6 +114,7 @@ if __name__=="__main__":
     parser.add_argument('--threshold', type=float, default = 0.1)
     parser.add_argument('--strategy', type=str, default='random')
     parser.add_argument('--epsilon', type=float, default=0.5) # epsilon for finding adv. examples
+    parser.add_argument('--dropout', type=float, default=0.0) # dropout rate
 
     args = parser.parse_args()
     if args.target_indices == '':
@@ -135,10 +136,10 @@ if __name__=="__main__":
     args.strategy = str.strip(args.strategy)
     assert args.strategy in strategies, 'strategy must be in [' + ' '.join(strategies) + '] but is ' + args.strategy
 
-    if args.dataset in ['income', 'compas', 'mnist', 'whobin']:
-        args.loss = nn.CrossEntropyLoss() 
-    else:
+    if args.dataset in ['mnist']: 
         args.loss = nn.MSELoss() 
+    else:
+        args.loss = nn.CrossEntropyLoss()         
 
     if args.activation is not None:
         if args.activation == 'leak':

@@ -43,8 +43,11 @@ class BinaryDataset(Dataset):
         self.target_transform = target_transform
         if transform is not None:
             self.data = self.transform.transform(self.data)
+        else:
+            self.data = np.array(self.data)
         if target_transform is not None:
             self.labels = self.target_transform(self.labels)
+        
         
     def __len__(self):
         return len(self.labels)
@@ -131,7 +134,7 @@ def load_mnist_data(random_state, perturb_params):
     return train, test
 
 def load_data(file_base, dataset, scaler, scaler_labels, random_state, params):
-    if dataset in ['compas', 'income', 'whobin']:
+    if dataset in ['compas', 'income', 'whobin', 'german', 'german_cor']:
         train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state)
         test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=random_state)
     elif dataset == 'who':

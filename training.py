@@ -9,7 +9,7 @@ import linear_model
 
 class Params():
     def __init__(self, lr, lr_decay, epochs, batch_size, loss_fn, num_feat, num_classes, activation, nodes_per_layer, 
-                 num_layers, optimizer = None, seed = 0, epsilon=0.5):
+                 num_layers, optimizer = None, seed = 0, epsilon=0.5, dropout=0.0):
         self.learning_rate = lr
         self.lr_decay = lr_decay
         self.epochs = epochs
@@ -23,6 +23,7 @@ class Params():
         self.optimizer = optimizer
         self.manual_seed = seed
         self.epsilon = epsilon
+        self.dropout = dropout
 
 
 def train_linear_models(args, train, test, random_state):
