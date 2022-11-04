@@ -1,14 +1,8 @@
-import numpy as np
 import copy
-
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
-
-from art.attacks.evasion import FastGradientMethod
-from art.estimators.classification import PyTorchClassifier
-from art.utils import load_mnist
 
 import adversarial
 
@@ -156,7 +150,7 @@ def dnn_adversarial(train, test, params, dataset, random_state):
     for t in range(params.epochs):
         print(f"Epoch {t+1}\n-------------------------------")
         train_acc = train_loop(train_dataloader, model, params.loss_fn, optimizer)
-        if dataset in ['income', 'compas', 'whobin']:
+        if dataset in ['income', 'compas'] or ('whobin' in dataset):
             adv_examples, _ = adversarial.get_adversarial_example(params, model, orig_train.data, orig_train.labels, params.epsilon)
         else:
             adv_examples, _ = adversarial.get_adversarial_example_reg(params, model, orig_train.data, orig_train.labels, params.epsilon)

@@ -1,9 +1,6 @@
-import os
 import argparse
-
 import numpy as np
 import pandas as pd
-
 from torch import nn
 
 import data_utils
@@ -16,22 +13,12 @@ import training
 
 def main(args):
     random_states = [x-1 for x in range(100)]
-
-    assert(args.dataset in ['income', 'compas', 'mnist', 'who', 'whobin', 'german', 'german_cor'])
-
-    if args.dataset in ['income', 'compas', 'who']:
-        # check that traintest split is done - if not, create.
-        if not os.path.exists(args.file_base + '_train.csv'):
-            try:
-                data_utils.create_train_test_split('data/' + args.dataset + '/' + args.dataset + '.csv')
-            except:
-                print("Error: could not find or create train and test files.")
+    random_states = [0,1]
+    # assert(args.dataset in ['income', 'compas', 'mnist', 'who', 'german', 'german_cor'])
 
     test_accuracy, train_accuracy = [], []
     perturb_params = datasets.PerturbParams(args.strategy, args.threshold, args.target_indices, args.target_vals,
                     args.indices_to_change, args.new_vals)
-
-    
 
     for r in random_states:
         if args.fixed_seed:
@@ -46,7 +33,7 @@ def main(args):
                 columns=[args.label_col]), perturb_params, random_state=r)
             scaler_labels = data_utils.get_scaler(np.array(pd.read_csv(args.file_base + '_train.csv')[args.label_col]).reshape(-1, 1), 
                 perturb_params, random_state = -1)
-        elif args.dataset in ['whobin']:
+        elif 'whobin' in args.dataset:
             scaler = data_utils.get_scaler(pd.read_csv(args.file_base + '_train.csv').drop(
                 columns=[args.label_col]), perturb_params, random_state=r)
             scaler_labels = None
@@ -54,6 +41,16 @@ def main(args):
             scaler, scaler_labels = None, None
         
         train, test = datasets.load_data(args.file_base, args.dataset, scaler, scaler_labels, r, perturb_params)
+        secondary_dataset = None
+        if args.dataset_shift and 'orig' in args.dataset:
+            sec_name = args.dataset.replace('orig', 'shift')
+            file_base = args.file_base.replace('orig', 'shift')
+            _, secondary_dataset = datasets.load_data(file_base, sec_name, scaler, scaler_labels, r, perturb_params)
+        elif args.dataset_shift:
+            sec_name = args.dataset.replace('shift', 'orig')
+            file_base = args.file_base.replace('shift', 'orig')
+            _, secondary_dataset = datasets.load_data(file_base, sec_name, scaler, scaler_labels, r, perturb_params)
+
         if args.dataset in ['mnist']:
             #MNIST
             num_feat = 28*28
@@ -71,7 +68,7 @@ def main(args):
         elif args.adversarial:
             model, test_acc, train_acc, preds = training.train_adv_nn(params, train, test, r, args.dataset, args.threshold)
         else:
-            model, test_acc, train_acc, preds = training.train_nn(params, train, test, r, args.dataset, args.threshold)
+            model, test_acc, train_acc, preds = training.train_nn(params, train, test, r, args.dataset, args.threshold, secondary_dataset)
         test_accuracy.append(test_acc)
         train_accuracy.append(train_acc)
 
@@ -90,19 +87,20 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset', type=str)
     parser.add_argument('file_base', type=str)
+    parser.add_argument('--dataset_shift', type=bool, default=False)
     parser.add_argument('--adversarial', type=bool, default=False)
     parser.add_argument('--output_dir', type=str, default='.')
     parser.add_argument('--label_col', default='label', type=str)
 
     parser.add_argument('--linear', type=bool, default=False)
 
-    parser.add_argument('--lr', type=float, default=0.5)
-    parser.add_argument('--lr_decay', type=float, default=None)
-    parser.add_argument('--epochs', type=int, default=3)
+    parser.add_argument('--lr', type=float, default=0.2)
+    parser.add_argument('--lr_decay', type=float, default=0.8)
+    parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--activation', type=str, default='relu')
-    parser.add_argument('--nodes_per_layer', type=int, default=5)
-    parser.add_argument('--num_layers', type=int, default=3)
+    parser.add_argument('--nodes_per_layer', type=int, default=50)
+    parser.add_argument('--num_layers', type=int, default=5)
     parser.add_argument('--optimizer', type=str, default=None)
     parser.add_argument('--loss', type=str, default=None)
     parser.add_argument('--fixed_seed', type=bool, default=False) # if true, use seed 0 for all random states
@@ -111,7 +109,7 @@ if __name__=="__main__":
     parser.add_argument('--target_vals', type=str, default='')
     parser.add_argument('--indices_to_change', type=str, default='') # what indices to change?
     parser.add_argument('--new_vals', type=str, default='') # what can we change modified values to?
-    parser.add_argument('--threshold', type=float, default = 0.1)
+    parser.add_argument('--threshold', type=float, default = 0.0)
     parser.add_argument('--strategy', type=str, default='random')
     parser.add_argument('--epsilon', type=float, default=0.5) # epsilon for finding adv. examples
     parser.add_argument('--dropout', type=float, default=0.0) # dropout rate
@@ -150,4 +148,15 @@ if __name__=="__main__":
             args.activation = nn.ReLU()
     else:
         args.activation = nn.ReLU()
-    main(args)
+
+    # if we are testing dataset shift (rather than random perturbation), 
+    # call the remaining code 2x, once on original data and once on shifted data
+    if args.dataset_shift:
+        args.dataset = args.dataset + '_orig'
+        args.file_base = args.file_base + '_orig'
+        main(args)
+        args.dataset = args.dataset[:-5] + "_shift"
+        args.file_base = args.file_base[:-5] + "_shift"
+        main(args)
+    else:
+        main(args)

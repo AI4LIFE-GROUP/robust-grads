@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-
 import neural_net
 import linear_model
 
@@ -56,6 +55,7 @@ def train_linear_models(args, train, test, random_state):
 
 def eval_model(test_dataloader, model, start_str, random_state):
     logits = 0
+    
     for X,y in test_dataloader:
         X = X.float()
         X.requires_grad = True
@@ -80,6 +80,7 @@ def eval_model(test_dataloader, model, start_str, random_state):
     np.save(start_str + 'preds' + end_str, preds_nn)
     np.save(start_str + 'logits' + end_str, logits)
     np.save(start_str + 'gradients' + end_str, grads)
+        
 
 def get_activation_term(activation):
     if type(activation) == type(nn.ReLU()):
@@ -97,20 +98,36 @@ def train_adv_nn(params, train, test, random_state, dataset, threshold=None):
 
     act = get_activation_term(params.activation)
     start_str = dataset + "_adv_nn" + str(params.num_layers) + "_" + act +  "_" 
-    if threshold is not None:
+    if threshold is not None and threshold>0:
         start_str = start_str + "t" + str(threshold) + "_"
     eval_model(test_dataloader, nn_model, start_str, random_state)
 
     return nn_model, test_acc, train_acc, preds
 
-def train_nn(params, train, test, random_state, dataset, threshold=None):
+def train_nn(params, train, test, random_state, dataset, threshold=None, secondary_dataset=None):
+    
     train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)
     test_dataloader = DataLoader(test, batch_size=params.batch_size, shuffle=False)
+    secondary_dataloader = None
+    if secondary_dataset is not None:
+        secondary_dataloader = DataLoader(secondary_dataset, batch_size=params.batch_size, shuffle=False)
+
     nn_model, test_acc, train_acc, preds = neural_net.dnn(train_dataloader, test_dataloader, params, dataset)
 
     act = get_activation_term(params.activation)
     start_str = dataset + "_nn" + str(params.num_layers) + "_" + act +  "_" 
-    if threshold is not None:
+    if threshold is not None and threshold > 0:
         start_str = start_str + "t" + str(threshold) + "_"
-    eval_model(test_dataloader, nn_model, start_str, random_state)
+    # if looking at dataset shift, compute test stats on the same dataset (test/secondary) 
+    # and also on the backup dataset
+    if secondary_dataset is not None:
+        if 'orig' in dataset:
+            eval_model(test_dataloader, nn_model, start_str, random_state) # original, partial dataset
+            print("DID first eval model")
+            eval_model(secondary_dataloader, nn_model, start_str + "full_", random_state) # full, shifted data
+        else:
+            eval_model(secondary_dataloader, nn_model, start_str, random_state) # original, partial dataset
+            eval_model(test_dataloader, nn_model, start_str + "full_", random_state) # full, shifted data
+    else:
+        eval_model(test_dataloader, nn_model, start_str, random_state)
     return nn_model, test_acc, train_acc, preds

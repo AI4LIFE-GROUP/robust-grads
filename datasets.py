@@ -134,7 +134,7 @@ def load_mnist_data(random_state, perturb_params):
     return train, test
 
 def load_data(file_base, dataset, scaler, scaler_labels, random_state, params):
-    if dataset in ['compas', 'income', 'whobin', 'german', 'german_cor']:
+    if (dataset in ['compas', 'income', 'german', 'german_cor']) or ('whobin' in dataset):
         train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state)
         test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=random_state)
     elif dataset == 'who':
