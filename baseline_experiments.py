@@ -13,7 +13,6 @@ import training
 
 def main(args):
     random_states = [x-1 for x in range(100)]
-    random_states = [0,1]
     # assert(args.dataset in ['income', 'compas', 'mnist', 'who', 'german', 'german_cor'])
 
     test_accuracy, train_accuracy = [], []

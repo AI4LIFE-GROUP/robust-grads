@@ -30,8 +30,9 @@ def perturb_X(X, random_state, std_dv, min = None, max = None):
         return X
     torch.manual_seed(random_state)
     perturbation = torch.normal(torch.zeros(X.shape), std_dv * torch.ones_like(X))
+
     data_new = X + perturbation
-    if (min is not None) and (max is not None):
+    if (min is not None) or (max is not None):
         data_new = torch.clamp(data_new, min, max)
     return data_new
 
@@ -44,7 +45,6 @@ def satisfies(X, row, target_ind, target_val):
 def perturb_X_discrete(X, params, random_state):
     # Perturb X when all features are binary (0/1)
     # threshold in [0,1] is the fraction of features we will change
-    
     random.seed(random_state)
     
     X = np.matrix(X)
