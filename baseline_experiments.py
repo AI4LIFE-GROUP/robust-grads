@@ -65,9 +65,9 @@ def main(args):
         if args.linear:
             training.train_linear_models(args, train, test, r)
         elif args.adversarial:
-            model, test_acc, train_acc, preds = training.train_adv_nn(params, train, test, r, args.dataset, args.threshold)
+            model, test_acc, train_acc, preds = training.train_adv_nn(params, train, test, r, args.dataset)
         else:
-            model, test_acc, train_acc, preds = training.train_nn(params, train, test, r, args.dataset, args.threshold, secondary_dataset)
+            model, test_acc, train_acc, preds = training.train_nn(params, train, test, r, args.dataset, secondary_dataset)
         test_accuracy.append(test_acc)
         train_accuracy.append(train_acc)
 

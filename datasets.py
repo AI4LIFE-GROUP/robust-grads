@@ -58,7 +58,10 @@ class BinaryDataset(Dataset):
         return len(self.labels)
 
     def __getitem__(self, idx):
-        data = torch.tensor(self.data[idx])
+        if type(self.data) == type(np.ones(10)):
+            data = torch.tensor(self.data[idx])
+        else:
+            data = self.data[idx].clone().detach()
         try:
             label = self.labels.iloc[idx, 0]
         except:

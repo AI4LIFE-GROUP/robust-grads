@@ -91,20 +91,18 @@ def get_activation_term(activation):
         act = 'leak'
     return act
 
-def train_adv_nn(params, train, test, random_state, dataset, threshold=None):
+def train_adv_nn(params, train, test, random_state, dataset):
     test_dataloader = DataLoader(test, batch_size=params.batch_size, shuffle=False)
     
     nn_model, test_acc, train_acc, preds = neural_net.dnn_adversarial(train, test, params, dataset, random_state)
 
     act = get_activation_term(params.activation)
     start_str = dataset + "_adv_nn" + str(params.num_layers) + "_" + act +  "_" 
-    if threshold is not None and threshold>0:
-        start_str = start_str + "t" + str(threshold) + "_"
     eval_model(test_dataloader, nn_model, start_str, random_state)
 
     return nn_model, test_acc, train_acc, preds
 
-def train_nn(params, train, test, random_state, dataset, threshold=None, secondary_dataset=None):
+def train_nn(params, train, test, random_state, dataset, secondary_dataset=None):
     
     train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)
     test_dataloader = DataLoader(test, batch_size=params.batch_size, shuffle=False)
@@ -116,8 +114,6 @@ def train_nn(params, train, test, random_state, dataset, threshold=None, seconda
 
     act = get_activation_term(params.activation)
     start_str = dataset + "_nn" + str(params.num_layers) + "_" + act +  "_" 
-    if threshold is not None and threshold > 0:
-        start_str = start_str + "t" + str(threshold) + "_"
     # if looking at dataset shift, compute test stats on the same dataset (test/secondary) 
     # and also on the backup dataset
     if secondary_dataset is not None:
