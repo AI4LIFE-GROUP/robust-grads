@@ -128,7 +128,6 @@ def dnn_adversarial(train, test, params, dataset, random_state):
     train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)
     test_dataloader = DataLoader(test, batch_size=params.batch_size, shuffle=False)
     
-    orig_labels = copy.deepcopy(train.labels)
     train.labels = np.transpose(np.array(train.labels))[0]
     orig_train = copy.deepcopy(train)
     

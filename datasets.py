@@ -50,6 +50,8 @@ class BinaryDataset(Dataset):
         if random_state >= 0:
             if self.feature_type == 'continuous':
                 self.data = data_utils.perturb_X(self.data, random_state, perturb_params.threshold, min = 0)
+            elif self.feature_type == 'mixed':
+                self.data = data_utils.perturb_X_mixed(self.data, perturb_params, random_state, min = 0)
             else:
                 self.data = data_utils.perturb_X_discrete(self.data, perturb_params, random_state)
         
@@ -146,9 +148,15 @@ def load_mnist_data(random_state, perturb_params):
     return train, test
 
 def load_data(file_base, dataset, scaler, scaler_labels, random_state, params):
-    if (dataset in ['compas', 'income', 'german', 'german_cor']) or ('whobin' in dataset):
+    if 'whobin' in dataset:
         train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state)
         test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=-1)
+    elif dataset in ['compas', 'income', 'german', 'german_cor', 'student']:
+        train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state, feature_type='discrete')
+        test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=-1, feature_type='discrete')
+    elif dataset in ['jordan', 'kuwait']:
+        train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state, feature_type='mixed')
+        test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=-1, feature_type='mixed')
     elif dataset == 'who':
         train = WhoDataset(file_base + '_train.csv', params, transform=scaler, target_transform=scaler_labels, random_state=random_state)
         test = WhoDataset(file_base + '_test.csv', params, transform=scaler,  target_transform=scaler_labels, random_state=-1)

@@ -13,8 +13,7 @@ import training
 
 def main(args):
     random_states = [x-1 for x in range(100)]
-    # assert(args.dataset in ['income', 'compas', 'mnist', 'who', 'german', 'german_cor'])
-
+    random_states = [x-1 for x in range(5)]
     test_accuracy, train_accuracy = [], []
     perturb_params = datasets.PerturbParams(args.strategy, args.threshold, args.target_indices, args.target_vals,
                     args.indices_to_change, args.new_vals)
@@ -31,7 +30,10 @@ def main(args):
             scaler = data_utils.get_scaler(pd.read_csv(args.file_base + '_train.csv').drop(
                 columns=[args.label_col]), perturb_params, random_state=r)
             scaler_labels = data_utils.get_scaler(np.array(pd.read_csv(args.file_base + '_train.csv')[args.label_col]).reshape(-1, 1), 
-                perturb_params, random_state = -1)
+                perturb_params, random_state = -1, min_val=0)
+        elif args.dataset in ['jordan', 'kuwait']:
+            scaler, scaler_labels = data_utils.get_scaler_mixed(pd.read_csv(args.file_base + '_train.csv').drop(
+                columns=[args.label_col]), perturb_params, random_state=r, min_val=0)
         elif 'whobin' in args.dataset:
             scaler = data_utils.get_scaler(pd.read_csv(args.file_base + '_train.csv').drop(
                 columns=[args.label_col]), perturb_params, random_state=r)
