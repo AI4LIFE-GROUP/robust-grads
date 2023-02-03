@@ -1,5 +1,7 @@
 import argparse
 import numpy as np
+import os
+import pandas as pd
 
 # ----------------------
 # Accuracy and prediction consistency
@@ -268,10 +270,153 @@ def shift_comparison(args, random_seeds):
         np.save(first_part + "top5.npy", top_5_const)
     gradnorms = grad_norm_pairwise(grads[2], grads[3])
     np.save(first_part + "gradnorm.npy", gradnorms)
-        
 
+def load_np(filename):
+    a = np.load(filename)
+    return a
+
+def final_step(dir_base, ):
+    all_data = []
+    bad = []
+    for f in os.listdir(dir_base):
+        if "." in f and len(f)<10:
+            print(f)
+            continue
+        
+        params = [act, threshold, epoch]
+
+        count = 0
+        for g in os.listdir(dir_base + "/" + f):
+            count += 1
+            if 'preds' in g:
+                dataset = g.split("_preds")[0]
+        if count == 1:
+            bad.append(f)
+            continue
+
+        accuracy_file_name = dataset.split("_t")[0]
+        if 'adv' in accuracy_file_name:
+            accuracy_file_name = accuracy_file_name.split("_adv")[0] + accuracy_file_name.split("adv")[1]
+        accuracy = load_np(dir_base + "/" + f + "/accuracy_" + accuracy_file_name + ".npy")
+        test_acc = accuracy[0]
+        train_acc = accuracy[1]
+        params.append(min(test_acc))
+        params.append(sum(test_acc)/len(test_acc))
+        params.append(max(test_acc))
+        params.append(np.std(test_acc))
+        params.append(min(train_acc))
+        params.append(sum(train_acc)/len(train_acc))
+        params.append(max(train_acc))
+        params.append(np.std(train_acc))
+
+        # do this almost all the time, except for adv-only tests
+        top1 = load_np(dir_base + "/" + f + "/" + dataset + "_top1const.npy")
+        top2 = load_np(dir_base + "/" + f + "/" + dataset + "_top2const.npy")
+        top3 = load_np(dir_base + "/" + f + "/" + dataset + "_top3const.npy")
+        top4 = load_np(dir_base + "/" + f + "/" + dataset + "_top4const.npy")
+        top5 = load_np(dir_base + "/" + f + "/" + dataset + "_top5const.npy")
+        gradnorm = load_np(dir_base + "/" + f+ "/" + dataset + "_gradnorm.npy")
+        if dataset_shift:
+            for j in [top1, top2, top3, top4, top5, gradnorm]:
+                params.append(sum(j)/len(j))
+                for p in [10,25,50,75,90]:
+                    params.append(np.percentile(np.array(j), p))
+            all_data.append(params)
+        else:
+            for j in [top1, top2, top3, top4, top5, gradnorm]:
+                params.append(sum(j)/len(j))
+                for p in [10,25,50,75,90]:
+                    params.append(np.percentile(np.array(j), p))
+            all_data.append(params)
+    return all_data
+    
 def main(args):
-    random_seeds = [x-1 for x in range(100)]
+    epochs = [1, 2, 5, 10, 20, 30, 40, 50]
+    thresholds = [0.0, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
+    dataset = args.dataset
+    filebase = args.filebase
+
+    all_res = []
+    for act in ['relu', 'soft', 'adv']:
+        for threshold in thresholds:
+            for ep_idx in range(len(epochs)):
+                epoch = epochs[ep_idx]
+                if args.dataset_shift:
+                    filename = get_filename(dataset + '_orig', filebase, threshold, epoch, act)
+                    filename_shift = get_filename(dataset + '_shift', filebase, threshold, epoch, act)
+                    filename_orig_full = get_filename(dataset + "_orig", filebase, threshold, epoch, act, full=1)
+                    filename_shift_full = get_filename(dataset + "_shift", filebase, threshold, epoch, act, full=1)
+                else:
+                    filename = get_filename(dataset, filebase, threshold, epoch, act)
+                grads_base, tops = get_grads_base(filename)
+                if args.dataset_shift:
+                    grads_base_shift, tops_shift = get_grads_base(filename_shift)
+                    grads_base_orig_full, tops_orig_full = get_grads_base(filename_orig_full)
+                    grads_base_shift_full, tops_shift_full = get_grads_base(filename_shift_full)
+                signs = np.sign(grads_base)
+                if args.dataset_shift:
+                    signs_shift = np.sign(grads_base_shift)
+                    signs_orig_full = np.sign(grads_base_orig_full)
+                    signs_shift_full = np.sign(grads_base_shift_full)
+                new_res = [act, threshold, epoch]
+
+                if args.dataset_shift:
+                    new_res.append(avg_train[0,ep_idx])
+                    new_res.append(avg_train_shift[0,ep_idx])
+                    for perc in [10,25,50,75,90]:
+                        new_res.append(np.percentile(np.array(train_acc.T[ep_idx])[0],perc))
+                        new_res.append(np.percentile(np.array(train_acc_shift.T[ep_idx])[0],perc))
+                    new_res.append(avg_test[0,ep_idx])
+                    new_res.append(avg_test_shift[0,ep_idx])
+                    new_res.append(avg_test_shift_part[0,ep_idx])
+                    new_res.append(avg_test_orig_full[0,ep_idx])
+                    for perc in [10,25,50,75,90]:
+                        new_res.append(np.percentile(np.array(test_acc.T[ep_idx])[0], perc))
+                        new_res.append(np.percentile(np.array(test_acc_shift.T[ep_idx])[0], perc))
+                        new_res.append(np.percentile(np.array(test_acc_shift_part.T[ep_idx])[0], perc))
+                        new_res.append(np.percentile(np.array(test_acc_orig_full.T[ep_idx])[0], perc))
+                else:
+                    new_res.append(avg_train[0,ep_idx])
+                    for perc in [10,25,50,75,90]:
+                        new_res.append(np.percentile(np.array(train_acc.T[ep_idx])[0],perc))
+                    new_res.append(avg_test[0,ep_idx])
+                    for perc in [10,25,50,75,90]:
+                        new_res.append(np.percentile(np.array(test_acc.T[ep_idx])[0], perc))
+
+                new_res.extend(add_tops(filename, tops, signs, grads_base))
+                if args.dataset_shift:
+                    new_res.extend(add_tops(filename_shift, tops_shift, signs_shift, grads_base_shift))
+                    new_res.extend(add_tops(filename_orig_full, tops_orig_full, signs_orig_full, grads_base_orig_full))
+                    new_res.extend(add_tops(filename_shift_full, tops_shift_full, signs_shift_full, grads_base_shift_full))
+
+                all_res.append(new_res)
+
+    columns = ['activation', 'threshold', 'epochs']
+    if args.dataset_shift:
+        options = ['train', 'train_shift', 'test', 'test_shift', 'test_shift_part', 'test_orig_full']
+    else:
+        options = ['train','test']
+    for t in options:
+        columns.append(t + "_acc")
+        for perc in [10,25,50,75,90]:
+            columns.append(t + '_acc_p' + str(perc))
+    if args.dataset_shift:
+        options = ['orig_part_', 'shift_part_', 'orig_full_', 'shift_full_']
+    else:
+        options = ['']
+    for o in options:
+        for k in range(5):
+            for res in ['top_a_', 'top_sa_', 'top_cdc_', 'top_ssd_']:
+                columns.append(o + res + str(k))
+                for perc in [10,25,50,75,90]:
+                    columns.append(o + res + str(k) + "_p" + str(perc))
+        for res in ['gradient_raw', 'gradient_unit', 'gradient_avg']:
+            columns.append(o + res)
+            for perc in [10,25,50,75,90]:
+                columns.append(o + res + "_p" + str(perc))
+
+    df = pd.DataFrame(all_res,columns=columns)
+    df.to_csv(args.outputfile)
 
     if args.dataset_shift:
         orig_dataset = args.dataset
@@ -287,8 +432,7 @@ def main(args):
         shift_comparison(args, random_seeds)
 
     else:
-        pairwise_comparison(args, random_seeds)
-    
+        pairwise_comparison(args, random_seeds)    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

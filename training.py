@@ -8,7 +8,7 @@ import linear_model
 
 class Params():
     def __init__(self, lr, lr_decay, epochs, batch_size, loss_fn, num_feat, num_classes, activation, nodes_per_layer, 
-                 num_layers, optimizer = None, seed = 0, epsilon=0.5, dropout=0.0):
+                 num_layers, optimizer = None, seed = 0, epsilon=0.2, dropout=0.0, weight_decay=0):
         self.learning_rate = lr
         self.lr_decay = lr_decay
         self.epochs = epochs
@@ -23,6 +23,7 @@ class Params():
         self.manual_seed = seed
         self.epsilon = epsilon
         self.dropout = dropout
+        self.weight_decay = weight_decay
 
 
 def train_linear_models(args, train, test, random_state):
@@ -53,77 +54,20 @@ def train_linear_models(args, train, test, random_state):
     np.save(start_str + 'none_logits' + end_str, logits_lr_none)
     np.save(start_str + 'none_gradients' + end_str, lr_model_none.coef_[0])
 
-def eval_model(test_dataloader, model, start_str, random_state):
-    logits = 0
-    
-    for X,y in test_dataloader:
-        X = X.float()
-        X.requires_grad = True
-        if type(logits) == type(1):
-            new_log = model(X)
-            new_grads = torch.autograd.grad(outputs=new_log, inputs=X, grad_outputs=torch.ones_like(new_log))[0]
-            logits = new_log.detach().numpy()
-            grads = new_grads
-            labels = y
-        else:
-            new_log = model(X)
-            new_grads = torch.autograd.grad(outputs=new_log, inputs=X, grad_outputs=torch.ones_like(new_log))[0]
-            logits = np.concatenate((logits, new_log.detach().numpy()), axis=0)
-            grads = np.concatenate((grads, new_grads), axis=0)
-            labels = np.concatenate((labels, y), axis=0)
-    if len(logits.shape) == 1:
-        preds_nn = logits
-    else:
-        preds_nn = np.argmax(logits,axis=1)
 
-    end_str = str(random_state) + '.npy'
-    np.save(start_str + 'preds' + end_str, preds_nn)
-    np.save(start_str + 'logits' + end_str, logits)
-    np.save(start_str + 'gradients' + end_str, grads)
-        
 
-def get_activation_term(activation):
-    if type(activation) == type(nn.ReLU()):
-        act = 'relu'
-    elif type(activation) == type(nn.Softplus(beta = 5)):
-        act = 'soft'
-    else:
-        act = 'leak'
-    return act
-
-def train_adv_nn(params, train, test, random_state, dataset):
+def train_adv_nn(params, train, test, random_state, dataset, output_dir, run_id, secondary_dataset=None, finetune = False, finetune_base = False):
     test_dataloader = DataLoader(test, batch_size=params.batch_size, shuffle=False)
     
-    nn_model, test_acc, train_acc, preds = neural_net.dnn_adversarial(train, test, params, dataset, random_state)
+    nn_model, test_acc, train_acc, secondary_acc, test_loss, train_loss = neural_net.dnn_adversarial(train, test, test_dataloader, params, dataset, random_state, output_dir, run_id, secondary_dataset, finetune, finetune_base)
 
-    act = get_activation_term(params.activation)
-    start_str = dataset + "_adv_nn" + str(params.num_layers) + "_" + act +  "_" 
-    eval_model(test_dataloader, nn_model, start_str, random_state)
+    return nn_model, test_acc, train_acc, secondary_acc, test_loss, train_loss
 
-    return nn_model, test_acc, train_acc, preds
-
-def train_nn(params, train, test, random_state, dataset, secondary_dataset=None):
+def train_nn(params, train, test, random_state, dataset, output_dir, run_id, secondary_dataset=None, finetune = False, finetune_base = False):
     
     train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)
     test_dataloader = DataLoader(test, batch_size=params.batch_size, shuffle=False)
-    secondary_dataloader = None
-    if secondary_dataset is not None:
-        secondary_dataloader = DataLoader(secondary_dataset, batch_size=params.batch_size, shuffle=False)
 
-    nn_model, test_acc, train_acc, preds = neural_net.dnn(train_dataloader, test_dataloader, params, dataset)
+    nn_model, test_acc, train_acc, secondary_acc, test_loss, train_loss = neural_net.dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondary_dataset, random_state, run_id, finetune, finetune_base)
 
-    act = get_activation_term(params.activation)
-    start_str = dataset + "_nn" + str(params.num_layers) + "_" + act +  "_" 
-    # if looking at dataset shift, compute test stats on the same dataset (test/secondary) 
-    # and also on the backup dataset
-    if secondary_dataset is not None:
-        if 'orig' in dataset:
-            eval_model(test_dataloader, nn_model, start_str, random_state) # original, partial dataset
-            print("DID first eval model")
-            eval_model(secondary_dataloader, nn_model, start_str + "full_", random_state) # full, shifted data
-        else:
-            eval_model(secondary_dataloader, nn_model, start_str, random_state) # original, partial dataset
-            eval_model(test_dataloader, nn_model, start_str + "full_", random_state) # full, shifted data
-    else:
-        eval_model(test_dataloader, nn_model, start_str, random_state)
-    return nn_model, test_acc, train_acc, preds
+    return nn_model, test_acc, train_acc, secondary_acc, test_loss, train_loss

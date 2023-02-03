@@ -42,7 +42,7 @@ def get_adversarial_example_reg(params, model, X_test, y_test, epsilon):
     return x_test_adv, loss
 
 
-def get_adversarial_example(params, model, X_test, y_test, epsilon):
+def get_adversarial_example(params, model, X_test, y_test, epsilon, printmode = False):
     if params.optimizer == 'amsgrad':
         optimizer = torch.optim.Adam(model.parameters(), lr=params.learning_rate, amsgrad=True)
     elif params.optimizer == 'adam':
@@ -69,6 +69,7 @@ def get_adversarial_example(params, model, X_test, y_test, epsilon):
     # Step 7: Evaluate the ART classifier on adversarial test examples
     predictions = classifier.predict(x_test_adv)
     accuracy = np.sum(np.argmax(predictions, axis=1) == np.squeeze(y_test)) / len(y_test)
-    print("Accuracy on adversarial test examples: {}%".format(accuracy * 100))
+    if printmode:
+        print("Accuracy on adversarial test examples: {}%".format(accuracy * 100))
     return x_test_adv, accuracy
 
