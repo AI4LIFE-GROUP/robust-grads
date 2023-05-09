@@ -11,9 +11,9 @@ from captum.attr import LimeBase
 from captum.attr import KernelShap
 from captum._utils.models.linear_model import SkLearnLinearModel
 
-import adversarial
+# import adversarial
 
-def train_loop(dataloader, model, loss_fn, optimizer, printmode=False):
+def train_loop(dataloader, model, loss_fn, optimizer, scheduler, printmode=False):
     size = len(dataloader.dataset)
     correct = 0
     loss = 0
@@ -37,6 +37,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, printmode=False):
         optimizer.zero_grad()
         losscur.backward()
         optimizer.step()
+       #scheduler.step()
 
         if batch % 100 == 0:
             losscur, current = losscur.item(), batch * len(X)
@@ -146,17 +147,12 @@ def get_activation_term(activation):
         act = 'leak'
     return act
 
-def dnn_adversarial(train, test, test_dataloader, params, dataset, random_state, output_dir, run_id, secondary_dataset, finetune, finetune_base):
+def dnn_adversarial(train, train_dataloader, test_dataloader, params, dataset, random_state, output_dir, run_id, secondary_dataset, finetune, finetune_base):
     torch.manual_seed(params.manual_seed)
-    train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)
-    test_dataloader = DataLoader(test, batch_size=params.batch_size, shuffle=False)
     
     train.labels = np.transpose(np.array(train.labels))[0]
     orig_train = copy.deepcopy(train)
     
-    # create a random tensor of shape (n,k)
-    X = torch.rand((len(train), params.num_feat), requires_grad=True)
-
     if dataset == 'mnist':
         model = CNN()
     else:
@@ -171,6 +167,7 @@ def dnn_adversarial(train, test, test_dataloader, params, dataset, random_state,
         optimizer = torch.optim.Adam(model.parameters(), lr=params.learning_rate)
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=params.learning_rate, weight_decay=params.weight_decay)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.9, last_epoch=- 1, verbose=False)
     
     secondary_dataloader = None
     if secondary_dataset is not None:
@@ -186,22 +183,23 @@ def dnn_adversarial(train, test, test_dataloader, params, dataset, random_state,
         if ((t+1)%5 == 0):
             printmode=True
             print(f"Epoch {t+1}\n-------------------------------")
-        train_acc, train_loss = train_loop(train_dataloader, model, params.loss_fn, optimizer, printmode)
+        train_acc, train_loss = train_loop(train_dataloader, model, params.loss_fn, optimizer, scheduler, printmode)
         if dataset in ['income', 'compas'] or ('whobin' in dataset):
             adv_examples, _ = adversarial.get_adversarial_example(params, model, orig_train.data, orig_train.labels, params.epsilon, printmode)
         else:
             adv_examples, _ = adversarial.get_adversarial_example_reg(params, model, orig_train.data, orig_train.labels, params.epsilon)
         
-        test_acc, test_loss = test_loop(test_dataloader, model, params.loss_fn,printmode)
+        test_acc, test_loss = test_loop(test_dataloader, model, params.loss_fn, printmode)
 
         train.data = adv_examples
         train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)
 
         secondary_test_acc = None
-        if params.lr_decay is not None:
-            for g in optimizer.param_groups:
-                g['lr'] = g['lr'] * params.lr_decay
-        if ((t+1) % 5 == 0) or (t == 0) or (t == 1) or (t == 4):
+        # if params.lr_decay is not None:
+        #     for g in optimizer.param_groups:
+        #         g['lr'] = g['lr'] * params.lr_decay
+        #if ((t+1) % 5 == 0) or (t == 0) or (t == 1) or (t == 4):
+        if ((t+1) % 5 == 0):
             start_str = output_dir + "/results_"
             if 'shift' in dataset:
                 start_str = start_str + "shift_" + run_id + "_e" + str(t+1) + "_" 
@@ -210,7 +208,8 @@ def dnn_adversarial(train, test, test_dataloader, params, dataset, random_state,
             else:
                 start_str = start_str + run_id + "_e" + str(t+1) + "_"
             test_lime = False
-            if (t+1 == 30) or (t+1 == 40) or (t+1 == 50) or (t+1 == 80) or (t+1 == 100):
+            #if (t+1 == 30) or (t+1 == 40) or (t+1 == 50) or (t+1 == 80) or (t+1 == 100):
+            if (t+1 == params.epochs):
                 test_lime = True
             if secondary_dataset is not None:
                 if 'orig' in dataset:
@@ -226,13 +225,29 @@ def dnn_adversarial(train, test, test_dataloader, params, dataset, random_state,
                 eval_model(test_dataloader, model, start_str, random_state, test_lime)
             all_acc_train.append(train_acc)
             all_acc_test.append(test_acc)
-            all_loss_train.append(train_loss)
+            all_loss_train.append(train_loss.item())
             all_loss_test.append(test_loss)
     
     params.learning_rate = orig_lr # reset for iterating on next random seed
     if finetune_base:
-        torch.save(model.state_dict(), output_dir + "/model_" + str(params.manual_seed) + ".pt")
-    return model, all_acc_test, all_acc_train, all_sec_acc, all_loss_test.detach(), all_loss_train.detach()
+        torch.save(model.state_dict(), output_dir + 'model_' + str(params.manual_seed) + '.pt')
+    elif finetune:
+        orig_model = NeuralNetwork(params.num_feat, params.num_classes, params.activation, 
+                          params.nodes_per_layer, params.num_layers, params.dropout)
+        orig_model.load_state_dict(torch.load(output_dir + 'model_' + run_id + str(params.manual_seed) + '.pt'))
+
+        diff_squared=0
+        for s,m in zip(orig_model.stack, model.stack):
+            if type(s) == torch.nn.modules.linear.Linear:
+                diff_squared += ((s.weight-m.weight)**2).sum().item()
+        diff_squared = diff_squared ** 0.5
+
+        np.save("theta_diff_" + run_id + "_" + str(random_state) + ".npy",diff_squared)
+    else:
+        # save model so we can compute theta diff later
+        torch.save(model.state_dict(), output_dir + 'model_' + run_id + str(random_state) + '.pt')
+       
+    return model, np.array(all_acc_test), np.array(all_acc_train), np.array(all_sec_acc), np.array(all_loss_test), np.array(all_loss_train)
 
 class Modified_Model_Lime(nn.Module):
     def __init__(self, model, y):
@@ -294,12 +309,14 @@ def eval_model(test_dataloader, model, start_str, random_state, test_lime):
         new_log = model(X)
         end_num = min(batch*batch_size + batch_size, total_samples)
 
-        logits[(batch*batch_size):end_num] = new_log.detach()
-        labels[(batch*batch_size):end_num] = y
+
         grads[(batch*batch_size):end_num] = torch.autograd.grad(outputs=new_log, inputs=X, grad_outputs=torch.ones_like(new_log))[0]
-        salience[(batch*batch_size):end_num] = sal.attribute(X, abs=False)
-        smoothgrad[(batch*batch_size):end_num] = sg.attribute(X, nt_type = 'smoothgrad', nt_samples = 10, abs=False) 
-        
+        if test_lime:
+            logits[(batch*batch_size):end_num] = new_log.detach()
+            labels[(batch*batch_size):end_num] = y
+            salience[(batch*batch_size):end_num] = sal.attribute(X, abs=False)
+            smoothgrad[(batch*batch_size):end_num] = sg.attribute(X, nt_type = 'smoothgrad', nt_samples = 10, abs=False) 
+            
         if test_lime and (total_lime_queries < total_lime_samples):
             i = 0
             for x in X:
@@ -323,11 +340,13 @@ def eval_model(test_dataloader, model, start_str, random_state, test_lime):
         preds_nn = np.argmax(logits,axis=1)
 
     end_str = str(random_state) + '.npy'
-    np.save(start_str + 'preds' + end_str, preds_nn)
-    np.save(start_str + 'logits' + end_str, logits)
+
     np.save(start_str + 'gradients' + end_str, grads)
-    np.save(start_str + 'salience' + end_str, salience)
-    np.save(start_str + 'smoothgrad' + end_str, smoothgrad)
+    if test_lime:
+        np.save(start_str + 'preds' + end_str, preds_nn)
+        np.save(start_str + 'logits' + end_str, logits)
+        np.save(start_str + 'salience' + end_str, salience)
+        np.save(start_str + 'smoothgrad' + end_str, smoothgrad)
     if test_lime:
         np.save(start_str + 'lime' + end_str, lime_grads)
         np.save(start_str + 'shap' + end_str, kernel_shap)
@@ -340,6 +359,7 @@ def dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondar
         model = NeuralNetwork(params.num_feat, params.num_classes, params.activation, 
                           params.nodes_per_layer, params.num_layers, params.dropout)
         if finetune:
+            print("loading model state")
             model.load_state_dict(torch.load(output_dir + 'model_' + str(params.manual_seed) + '.pt'))
 
     epochs = params.epochs
@@ -349,7 +369,8 @@ def dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondar
         optimizer = torch.optim.Adam(model.parameters(), lr=params.learning_rate)
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=params.learning_rate, weight_decay=params.weight_decay)
-    
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.9, last_epoch=- 1, verbose=False)
+
     secondary_dataloader = None
     if secondary_dataset is not None:
         secondary_dataloader = DataLoader(secondary_dataset, batch_size=params.batch_size, shuffle=False)
@@ -365,19 +386,21 @@ def dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondar
             print(f"Epoch {t+1}\n-------------------------------")
             printmode = True
         
-        train_acc, train_loss = train_loop(train_dataloader, model, params.loss_fn, optimizer, printmode)
+        train_acc, train_loss = train_loop(train_dataloader, model, params.loss_fn, optimizer, scheduler, printmode)
         test_acc, test_loss = test_loop(test_dataloader, model, params.loss_fn, printmode)
-        if params.lr_decay is not None:
-            for g in optimizer.param_groups:
-                g['lr'] = g['lr'] * params.lr_decay
+        # if params.lr_decay is not None:
+        #     for g in optimizer.param_groups:
+        #         g['lr'] = g['lr'] * params.lr_decay
 
-        if ((t+1) % 5 == 0) or (t == 0) or (t == 1) or (t == 4):
+        #if ((t+1) % 5 == 0) or (t == 0) or (t == 1) or (t == 4):
+        if ((t + 1) == epochs):
             start_str = output_dir + "/results_" + run_id + "_e" + str(t+1) + "_" 
             # if looking at dataset shift, compute test stats on the same dataset (test/secondary) 
             # and also on the backup dataset
             secondary_test_acc = None
             test_lime = False
-            if (t+1 == 30) or (t+1 == 40) or (t+1 == 50) or (t+1 == 80) or (t+1 == 100):
+            #if (t+1 == 20) or (t+1 == 40) or (t+1 == 50) or (t+1 == 80) or (t+1 == 100):
+            if (t+1 == epochs):
                 test_lime = True
             if secondary_dataset is not None:
                 if 'orig' in dataset:
@@ -396,7 +419,25 @@ def dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondar
             all_loss_train.append(train_loss.item())
             all_loss_test.append(test_loss)
             
+    # print the scheduler's current learning rate
+    print('Learning rate: ', scheduler.get_last_lr())
     params.learning_rate = orig_lr
     if finetune_base:
         torch.save(model.state_dict(), output_dir + 'model_' + str(params.manual_seed) + '.pt')
+    elif finetune:
+        orig_model = NeuralNetwork(params.num_feat, params.num_classes, params.activation, 
+                          params.nodes_per_layer, params.num_layers, params.dropout)
+        orig_model.load_state_dict(torch.load(output_dir + 'model_' + str(params.manual_seed) + '.pt'))
+
+        diff_squared=0
+        for s,m in zip(orig_model.stack, model.stack):
+            if type(s) == torch.nn.modules.linear.Linear:
+                diff_squared += ((s.weight-m.weight)**2).sum().item()
+        diff_squared = diff_squared ** 0.5
+
+        np.save("theta_diff_" + run_id + "_" + str(random_state) + ".npy",diff_squared)
+    else:
+        # save model so we can compute theta diff later
+        torch.save(model.state_dict(), output_dir + 'model_' + run_id + str(random_state) + '.pt')
+        
     return model, np.array(all_acc_test), np.array(all_acc_train), np.array(all_sec_acc), np.array(all_loss_test), np.array(all_loss_train)

@@ -10,9 +10,6 @@ import training
 # LINEAR MODELS - see linear_model.py
 # NEURAL ARCHITECTURE - see neural_net.py
 
-'''' fuck this is annoying.
-TO DO: for dataset shift we want to train 100 models of each orig and shift.
-Then compare across each set of models (compare RS 0 with RS0, etc.) ugghhhh'''
 
 def main(args):
     if args.fixed_seed == False:
@@ -29,7 +26,7 @@ def main(args):
     base_iter = 0
     finetune = args.finetune
     for r in random_states:
-        if (args.fixed_seed == False) and (r < args.base_repeats):
+        if (not args.dataset_shift) and (args.fixed_seed == False) and (r < args.base_repeats):
             add_noise = False
             baseline_model = True
         elif (r % (args.variations + 1) == 0):
