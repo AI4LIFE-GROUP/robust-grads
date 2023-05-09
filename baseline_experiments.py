@@ -24,7 +24,7 @@ def main(args):
                                             args.target_vals, args.indices_to_change, args.new_vals)
 
     for r in random_states:
-        if (args.fixed_seed == False) and (r < args.base_repeats):
+        if (not args.dataset_shift) and (args.fixed_seed == False) and (r < args.base_repeats):
             add_noise = False
             baseline_model = True
         elif (r % (args.variations + 1) == 0):

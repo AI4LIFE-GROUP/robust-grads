@@ -151,7 +151,7 @@ def load_data(file_base, dataset, scaler, scaler_labels, random_state, params, a
     if 'whobin' in dataset:
         train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state, add_noise=add_noise)
         test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=-1, add_noise=add_noise)
-    elif dataset in ['compas', 'income', 'german', 'german_cor', 'student']:
+    elif dataset in ['compas', 'income', 'german', 'german_cor', 'student','heloc', 'adult']:
         train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state, feature_type='discrete', add_noise=add_noise)
         test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=-1, feature_type='discrete', add_noise=add_noise)
     elif dataset in ['jordan', 'kuwait']:

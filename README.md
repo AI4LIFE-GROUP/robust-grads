@@ -1,31 +1,35 @@
-# robust-grads
-
-## Under construction!! 
+# On Minimizing the Impact of Dataset Shifts on Actionable Explanations
 
 ## Datasets:
-### General
 * [WHO](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who?resource=download)
-* Adult income and COMPAS - no data yet because features are mostly categorical -- i.e., don't work for adversarial training
-* MNIST
+* [Adult Income](https://archive.ics.uci.edu/ml/datasets/Adult)
+* [HELOC](https://community.fico.com/s/explainable-machine-learning-challenge)
 
-### Distribution shift
-* German credit, [original](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who?resource=download) and [updated](https://archive.ics.uci.edu/ml/datasets/South+German+Credit+%28UPDATE%29) -- no data yet since features are categorical. 
-* WHO dataset, again -- create multiple datasets that span different years.
 
-It is easy to add other tabular datasets, just search for wherever 'whobin' appears in the code and update the list to include your dataset. Select the correct branches in `datasets.load_data` depending on if the label is binary or continuous. Right now, we assume continuous features, but binary features can be supported (apart from for adversarial training) by modifying the `continuous` flags in `datasets.load_data`
+The code assumes that there exists `<file_base>_train.csv` and `<file_base>_test.csv` files, where `<file_base>` is the second command-line argument and can be, for example, `data/adult` if the files `data/adult_train.csv` and `data/adult_test.csv` exist. 
 
-The code assumes that there exists `<file_base>_train.csv` and `<file_base>_test.csv` files, where `<file_base>` is the second command-line argument and can be, for example, `data/german` if the files `data/german_train.csv` and `data/german_test.csv` exist. 
+## Dependencies
+Our code relies on standard python libraries like `numpy`, `pandas`, and `pytorch`. We also use the [Captum](https://captum.ai/) library to compute explanations.
 
-## To run:
-The code is broken into two pieces. `baseline_experiments.py` trains 100 neural networks and saves their accuracy (train and test), test-set predictions (binary predictions and logits), and test-set gradients in `.npy` files.
+## To replicate our results:
+For the WHO results, run `exps.sh`. CSV files will be saved as `ft_res_who.csv` for fine-tuning (Sec 4.1) and `rt_res_who` for retraining (Sec 4.2). 
 
-`python3 baseline_experiments.py <dataset> <file_base>`
+## To run custom experiments:
+The code is broken into two pieces. 
 
-The second piece, `postprocess_grads.py` post-processes the above files and computes pairwise similarity scores between all 100 models' top-k (k=1,2,3,4,5) feature scores and overall gradients.
+*Training networks* 
+`baseline_experiments.py` trains 100 neural networks and saves their accuracy (train and test), test-set predictions (binary predictions and logits), and test-set gradients in `.npy` files. 
 
-`python3 postprocess_grads.py data_prefix <output_directory>` where `data_prefix` is the `.npy` file name up through the file `_`, e.g., `whobin_nn3_relu_t0.1`.
+`python3 baseline_experiments.py <dataset> <file_base> <run_id>` 
 
-This will generate more numpy files, where each file stores information about the top-k or gradient norm (L2 norm is the default) for each test point. From there, you can load the .npy files in a script and compute the average across all test points for each metric.
+To streamline fine-tuning experiments, `dataset_shift_exps.py` may also be used.
+
+*Evaluating networks*
+The second piece, `single_comp_metrics.py` post-processes the above files and computes pairwise similarity scores between all 100 models' top-k (k=1,2,3,4,5) feature scores and overall gradients.
+
+`python3 single_comp_metrics.py data_prefix <output_directory> <run_id>` where `data_prefix` is the `.npy` file name up through the file `_`, e.g., `whobin_nn3_relu_t0.1`.
+
+To streamline the post-processing of fine-tuning experiments, use `comp_fs_shift.py`
 
 ### Random perturbation
 Given a single dataset, we can add random perturbations to test similarity of models learned across similar datasets.
@@ -72,5 +76,4 @@ These are not currently used in my experiments, but could be of use if we want t
 ## Notes about the results
 For most results we only consider parameter settings that result in good accuracy. Intuitively, if one model of the 100 has low accuracy, there is more space for it to disagree with other models, so the discrepancy metrics may be inflated. 
 
-There was previously a bug where continuous data was not modified with Gaussian noise -- instead, the provided propotion (via the threshold argument) was set to 0. These results have been moved to the `old` directory within the `results` folder in case we ever want to come back to them.
-# robust-grads-refactor
+>>>>>>> anna

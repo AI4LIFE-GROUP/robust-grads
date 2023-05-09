@@ -5,9 +5,9 @@ import os
 import argparse
 
 
-epochs = [1, 2, 5, 10]#, 20, 30]#, 40, 50, 60, 70, 80, 90, 100]
-lime_epochs = [30]#, 40, 50, 80, 100]
-max_epochs = 10 #100
+epochs = [30] # [1, 2, 5, 10, 20, 30]#, 40, 50, 60, 70, 80, 90, 100]
+lime_epochs = [30] # [30, 40, 50, 80, 100]
+max_epochs = 30
 
 def get_top_k(k, X):
     X = np.abs(X)
@@ -15,6 +15,11 @@ def get_top_k(k, X):
 
 def get_filename(filebase, run_id, epoch, shift = None, full = False):
     filename = filebase + "/results_" 
+    if 'adv' in run_id:
+        if (shift is not None) and (shift == 'orig'):
+            filename += 'orig_'
+        elif (shift is not None) and (shift == 'shift'):
+            filename += 'shift_'
     if shift is not None:
         if shift == 'shift':
             filename = filename + run_id + "_shift_e" + str(epoch) + "_"
@@ -40,10 +45,10 @@ def get_filename_loss(filebase, run_id):
 
 def get_filename_acc_shift(filebase, run_id):
     train_shift = filebase + "/" + 'accuracy_train_' + run_id + '_shift.npy'
-    train_orig = filebase + "/" + 'accuracy_train_' + run_id + '_orig.npy'
     test_shift = filebase + "/" + 'accuracy_test_' + run_id + '_shift.npy'
-    test_orig_full = filebase + "/" + 'accuracy_test_orig_' + run_id + '_orig.npy'
-    return train_shift, train_orig, test_shift, test_orig_full
+    train_orig = filebase + "/" + 'accuracy_train_' + run_id + '_orig.npy'
+    test_orig = filebase + "/" + 'accuracy_test_' + run_id + '_orig.npy'
+    return train_shift, test_shift, train_orig, test_orig
 
 def get_filename_loss_shift(filebase, run_id):
     ''' on orig model, just get loss on orig datasets'''
@@ -92,40 +97,64 @@ def gradient_angle(x, y, l):
 def top_k_overall(k, x, y):
     # x and y are nxk arrays
     # we want to return a n-dimensional array where each entry is the consistency between x and y
-    mask = (x[:,:,None] == y[:,None,:]).any(-1)
-    scores = np.sum(mask, axis=-1)/k
-    return sum(scores)/len(scores)
+    res = np.zeros([x.shape[0],k])
+    for i in range(x.shape[0]):
+        for j in range(k):
+            if x[i,j] in y[i]:
+                res[i,j] = 1
+            else:
+                res[i,j] = 0
+    frac_right = np.sum(res, axis=1)/k
+    return sum(frac_right)/len(frac_right)
 
 def top_k_sa(k, x, y, signs_x, signs_y):
     # X and Y are nxk arrays
     # we want to return a n-dimensional array where n[i] is the frac. of x[i] and y[i] 
     # that agree and have same sign
+    # step 1 just checks whether X's top-K features have the same sign in Y. If not, indices of x are set to 0
+    #     so that in top_k_overall they will not be counted
     limited_sx = signs_x[np.arange(x.shape[0])[:,None], x]
     limited_sy = signs_y[np.arange(x.shape[0])[:,None], x]
-    x = x * (limited_sx == limited_sy) + (-1) * (limited_sx != limited_sy)
+    
+    x = np.where(limited_sx == limited_sy, x, -1)
     return top_k_overall(k, x, y)
 
 def top_k_cdc(k, x, y, signs_x, signs_y):
-    ''' Returns contradicting direction of contribution, i.e., 0 = total agreement '''
+    ''' Returns CONSISTENT direction of contribution, i.e., 1 = total agreement '''
     limited_sx = signs_x[np.arange(x.shape[0])[:,None], x]
     limited_sy = signs_y[np.arange(x.shape[0])[:,None], x]
-    x = x * (limited_sx == limited_sy) + (-1) * (limited_sx != limited_sy)
+    x = (limited_sx == limited_sy)#  + (-1) * (limited_sx != limited_sy)
     limited_sx = signs_x[np.arange(y.shape[0])[:,None], y]
     limited_sy = signs_y[np.arange(y.shape[0])[:,None], y]
-    y = y * (limited_sx == limited_sy) + (-1) * (limited_sx != limited_sy)
-    scores = np.all(x != -1, axis=1) * np.all(y != -1, axis=1)
-    # flip 0's and 1's in score
-    scores = (scores == np.zeros(scores.shape))
+    y = (limited_sx == limited_sy)
+    scores = np.all(x == 1, axis=1) & np.all(y == 1, axis=1)
     return sum(scores)/len(scores)
 
 def top_k_ssd(k, x, y, signs_x, signs_y):
     ''' Returns Signed Set *Agreement* (i.e., 1 means perfect agreement)'''
+    # First, we need to satisfy CDC, so check that first: 
     limited_sx = signs_x[np.arange(x.shape[0])[:,None], x]
     limited_sy = signs_y[np.arange(x.shape[0])[:,None], x]
-    x = x * (limited_sx == limited_sy) + (-1) * (limited_sx != limited_sy)
-    mask = (x[:,:,None] == y[:,None,:]).any(-1)
-    scores = np.sum(mask, axis=-1)/k
-    scores = (scores == np.ones(scores.shape))
+    xeq = (limited_sx == limited_sy)#  + (-1) * (limited_sx != limited_sy)
+    limited_sx = signs_x[np.arange(y.shape[0])[:,None], y]
+    limited_sy = signs_y[np.arange(y.shape[0])[:,None], y]
+    yeq = (limited_sx == limited_sy)
+    cdc = np.logical_and(np.all(xeq == 1, axis=1), np.all(yeq == 1, axis=1))
+
+    # Next, we need to know whether X and Y have the same top-k features
+    res = np.zeros([x.shape[0],k])
+    for i in range(x.shape[0]):
+        for j in range(k):
+            if x[i,j] in y[i]:
+                res[i,j] = 1
+            else:
+                res[i,j] = 0
+    frac_right = np.sum(res, axis=1)/k
+    frac_right = np.where(frac_right == 1, 1, 0)
+
+    # now, frac_right is 1 if x and y have the same top-K features, and cdc is 1 if all of X's top-K features have the same sign in Y
+    # so, we need to return 1 if both are true and 0 otherwise
+    scores = np.logical_and(frac_right, cdc)
     return sum(scores)/len(scores)
 
 def add_tops_shift(filename_orig, filename_shift, n, lime_epoch):
@@ -163,12 +192,14 @@ def add_tops_shift(filename_orig, filename_shift, n, lime_epoch):
         for k in range(5):    
             for res in [top_f, top_sa, top_cdc, top_ssd]:
                 new_res.append(np.mean(res[k]))
-                for perc in [10, 25, 50, 75, 90]:
+                for perc in [5,10, 25, 50, 75, 90,95]:
                     new_res.append(np.percentile(res[k], perc))
+                new_res.append(np.std(res[k]))
         for res in [grads_raw, grads_normed, grads_angle]: 
             new_res.append(np.mean(res))
-            for perc in [10, 25, 50, 75, 90]:
+            for perc in [5,10, 25, 50, 75, 90,95]:
                 new_res.append(np.percentile(res, perc))
+            new_res.append(np.std(res))
         full_res.extend(new_res)
     if not lime_epoch:
         for i in range(2):
@@ -231,12 +262,14 @@ def add_tops(filename, tops, grads_base, tops_sal, salience_base, tops_smooth, s
         for k in range(5):
             for res in [top_f, top_sa, top_cdc, top_ssd]:
                 new_res.append(sum(res[k])/len(res[k]))
-                for perc in [10,25,50,75,90]:
+                for perc in [5,10,25,50,75,90,95]:
                     new_res.append(np.percentile(res[k], perc))
+                new_res.append(np.std(res[k]))
         for res in [grads_raw, grads_normed, grads_angle]:
             new_res.append(sum(res)/len(res))
-            for perc in [10, 25, 50, 75, 90]:
+            for perc in [5,10, 25, 50, 75, 90,95]:
                 new_res.append(np.percentile(res, perc))
+            new_res.append(np.std(res))
         full_res.extend(new_res)
     if lime_base is None:
         # do this so that all columns line up
@@ -262,13 +295,14 @@ def get_columns(args, dataset_shift):
     columns = ['dataset', 'iteration', 'epochs', 'threshold', 'adversarial', 'fixed_seed', 'variations', 'activation',
                 'lr', 'lr_decay', 'weight_decay', 'nodes_per_layer', 'num_layers', 'epsilon', 'beta', 'finetune']
     if dataset_shift:
-        options = ['train_shift', 'train_orig', 'test_shift', 'test_orig_full']
+        options = ['train_shift', 'test_shift', 'train_orig', 'test_orig']
     else:
         options = ['train','test']
     for t in options:
         columns.append(t + "_acc")
-        for perc in [10,25,50,75,90]:
+        for perc in [5,10,25,50,75,90,95]:
             columns.append(t + '_acc_p' + str(perc))
+        columns.append(t + '_acc_std')
     if dataset_shift:
         columns.extend(['train_loss_orig', 'test_loss_orig', 'train_loss_shift', 'test_loss_shift'])
     else:
@@ -281,12 +315,14 @@ def get_columns(args, dataset_shift):
         for k in range(5): 
             for res in ['top_a_', 'top_sa_', 'top_cdc_', 'top_ssd_']:
                 columns.append(o + res + str(k))
-                for perc in [10,25,50,75,90]:
+                for perc in [5,10,25,50,75,90,95]:
                     columns.append(o + res + str(k) + "_p" + str(perc))
+                columns.append(o + res + str(k) + "_std")
         for res in ['gradient_raw', 'gradient_normed', 'gradient_angle']:
             columns.append(o + res)
-            for perc in [10,25,50,75,90]:
+            for perc in [5,10,25,50,75,90,95]:
                 columns.append(o + res + "_p" + str(perc))
+            columns.append(o + res + "_std")
     return columns
 
 def process_random_seed(args):
@@ -334,11 +370,13 @@ def process_random_seed(args):
 
                 # add accuracy metrics
                 new_res.append(avg_train[0,ep_idx])
-                for perc in [10,25,50,75,90]:
+                for perc in [5,10,25,50,75,90,95]:
                     new_res.append(np.percentile(np.array(train_acc.T[ep_idx])[0],perc))
+                new_res.append(np.std(np.array(train_acc.T[ep_idx])[0]))
                 new_res.append(avg_test[0,ep_idx])
-                for perc in [10,25,50,75,90]:
+                for perc in [5,10,25,50,75,90,95]:
                     new_res.append(np.percentile(np.array(test_acc.T[ep_idx])[0], perc))
+                new_res.append(np.std(np.array(test_acc.T[ep_idx])[0]))
                 
                 new_res.extend(add_tops(filename, tops, grads_base, tops_sal, salience_base, tops_smooth, smooth_base, n, 
                                         base_repeats, tops_lime=tops_lime, lime_base = lime_base, tops_shap = tops_shap, shap_base = shap_base,
@@ -396,8 +434,9 @@ def process_fixed_seed(args, finetune):
                 targets = [train_acc, test_acc]
                 for avg, tar in zip(targets_avg, targets): 
                     new_res.append(avg[0,ep_idx])
-                    for perc in [10,25,50,75,90]:
+                    for perc in [5,10,25,50,75,90,95]:
                         new_res.append(np.percentile(np.array(tar.T[ep_idx])[0],perc))
+                    new_res.append(np.std(np.array(tar.T[ep_idx])[0]))
                 targets = [train_loss, test_loss]
                 for tar in targets: # 2 columns
                     new_res.append(tar[ep_idx])
@@ -425,15 +464,20 @@ def process_fixed_seed_shift(args, finetune):
         nodes_per_layer, num_layers = params[12], params[13]
         epsilon, beta = params[14], params[15]
 
-        train_shift, train_orig, test_shift, test_orig_full = get_filename_acc_shift(filebase, run_id) 
+        train_shift, test_shift, train_orig, test_orig = get_filename_acc_shift(filebase, run_id) 
         train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift = get_filename_loss_shift(filebase, run_id)
         if test_shift.split("/")[-1] not in os.listdir(filebase):
+            print("failed for ",test_shift.split("/")[-1])
             continue
 
-        train_shift_acc, train_orig_acc = np.matrix(np.load(train_shift)), np.matrix(np.load(train_orig))
-        test_shift_acc, test_orig_full_acc = np.matrix(np.load(test_shift)), np.matrix(np.load(test_orig_full))
-        avg_train_shift, avg_train_orig = np.average(train_shift_acc, axis=0), np.average(train_orig_acc, axis=0)
-        avg_test_shift, avg_test_orig_full = np.average(test_shift_acc, axis=0), np.average(test_orig_full_acc, axis=0)
+        train_shift_acc = np.matrix(np.load(train_shift))
+        test_shift_acc = np.matrix(np.load(test_shift))
+        train_orig_acc = np.matrix(np.load(train_orig))
+        test_orig_acc = np.matrix(np.load(test_orig))
+        avg_train_shift = np.average(train_shift_acc, axis=0)
+        avg_test_shift = np.average(test_shift_acc, axis=0)
+        avg_train_orig = np.average(train_orig_acc, axis=0)
+        avg_test_orig = np.average(test_orig_acc, axis=0)
         train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift = np.load(train_loss_orig), np.load(test_loss_orig), np.load(train_loss_shift), np.load(test_loss_shift)
         
         for ep_idx in range(len(epochs)):
@@ -452,12 +496,13 @@ def process_fixed_seed_shift(args, finetune):
                         nodes_per_layer, num_layers, epsilon, beta, params[16]] # 16 columns
 
             # add accuracy metrics
-            targets_avg = [avg_train_shift, avg_train_orig, avg_test_shift, avg_test_orig_full]
-            targets = [train_shift_acc, train_orig_acc, test_shift_acc, test_orig_full_acc]
+            targets_avg = [avg_train_shift, avg_test_shift, avg_train_orig, avg_test_orig]
+            targets = [train_shift_acc, test_shift_acc, train_orig_acc, test_orig_acc]
             for avg, tar in zip(targets_avg, targets): # 24 columns
                 new_res.append(avg[0,ep_idx])
-                for perc in [10,25,50,75,90]:
+                for perc in [5,10,25,50,75,90,95]:
                     new_res.append(np.percentile(np.array(tar.T[ep_idx])[0],perc))
+                new_res.append(np.std(np.array(tar.T[ep_idx])[0]))
             targets = [train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift]
             for tar in targets: # 4 columns
                 new_res.append(tar[ep_idx])
@@ -492,11 +537,10 @@ def main(args):
         finetune = True
     else:
         finetune = False
-    if params[4] == 'True':
-        if dataset_shift:
-            process_fixed_seed_shift(args, finetune)
-        else:
-            process_fixed_seed(args, finetune)
+    if dataset_shift:
+        process_fixed_seed_shift(args, finetune)
+    elif params[4] == 'True':
+        process_fixed_seed(args, finetune)
     else:
         process_random_seed(args) # for now, assume no dataset shift
 
