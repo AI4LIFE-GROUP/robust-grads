@@ -1,4 +1,5 @@
-# On Minimizing the Impact of Dataset Shifts on Actionable Explanations
+# robust-grads
+
 
 ## Datasets:
 * [WHO](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who?resource=download)
@@ -76,4 +77,4 @@ These are not currently used in my experiments, but could be of use if we want t
 ## Notes about the results
 For most results we only consider parameter settings that result in good accuracy. Intuitively, if one model of the 100 has low accuracy, there is more space for it to disagree with other models, so the discrepancy metrics may be inflated. 
 
->>>>>>> anna
+There was previously a bug where continuous data was not modified with Gaussian noise -- instead, the provided propotion (via the threshold argument) was set to 0. These results have been moved to the `old` directory within the `results` folder in case we ever want to come back to them.

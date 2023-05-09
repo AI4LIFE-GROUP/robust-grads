@@ -393,7 +393,7 @@ def dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondar
         #         g['lr'] = g['lr'] * params.lr_decay
 
         #if ((t+1) % 5 == 0) or (t == 0) or (t == 1) or (t == 4):
-        if ((t + 1) == epochs):
+        if ((t + 1) == (epochs+1)):
             start_str = output_dir + "/results_" + run_id + "_e" + str(t+1) + "_" 
             # if looking at dataset shift, compute test stats on the same dataset (test/secondary) 
             # and also on the backup dataset
