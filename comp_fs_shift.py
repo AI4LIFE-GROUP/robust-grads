@@ -4,9 +4,6 @@ import os
  
 import argparse
 
-train1_epochs = 4000
-ft_epochs = 1000
-
 def get_filename(filebase, run_id, epoch, shift = None, full = False):
     filename = filebase + "/results_" 
     if 'adv' in run_id:
@@ -144,14 +141,14 @@ def process_fixed_seed_shift(args, finetune):
         avg_test_shift = np.average(test_shift_acc, axis=0)
         train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift = np.load(train_loss_orig), np.load(test_loss_orig), np.load(train_loss_shift), np.load(test_loss_shift)
         
- 
-        filename = get_filename(filebase, run_id, train1_epochs, shift = 'orig')
-        filename_shift = get_filename(filebase, run_id, ft_epochs, shift = 'shift')
-        filename_orig_full = get_filename(filebase, run_id, train1_epochs, shift = 'orig', full=1)
-        filename_shift_full = get_filename(filebase, run_id, ft_epochs, shift = 'shift', full=1)
+        
+        filename = get_filename(filebase, run_id, args.epochs, shift = 'orig')
+        filename_shift = get_filename(filebase, run_id, args.finetune_epochs, shift = 'shift')
+        filename_orig_full = get_filename(filebase, run_id, args.epochs, shift = 'orig', full=1)
+        filename_shift_full = get_filename(filebase, run_id,  args.finetune_epochs, shift = 'shift', full=1)
 
     
-        new_res = [dataset, 0, train1_epochs, threshold, adversarial, 1, n, activation, lr, lr_decay, weight_decay,
+        new_res = [dataset, 0, args.epochs, threshold, adversarial, 1, n, activation, lr, lr_decay, weight_decay,
                     nodes_per_layer, num_layers, epsilon, beta, params[16]] # 16 columns
 
         # add accuracy metrics
@@ -198,6 +195,8 @@ if __name__ == "__main__":
     parser.add_argument('filebase', type=str)
     parser.add_argument('outputfile', type=str) # don't include .csv extension
     parser.add_argument('--run_id', type=str, nargs='+')
+    parser.add_argument('--epochs',type=int)
+    parser.add_argument('--finetune_epochs')
 
 
     args = parser.parse_args()

@@ -7,32 +7,8 @@ from torchvision.transforms import ToTensor
 
 import data_utils
 
-class PerturbParams():
-    '''
-    Stores data necessary to randomly perturb a dataset subject to constraints on what
-    samples can change.
-
-    strategy - current random or targeted
-    threshold - fraction of eligible samples to modify
-    
-    target_indices and target_vals store the criteria for changing a data point; i.e., a sample
-        x is only eligible to be modified if x[target_indices] == target_vals
-    
-    indices_to_change and new_vals represent how to modify (a subset of) samples that are eligible,
-        i.e., we set x[indices_to_change] := new_vals
-    '''
-    def __init__(self, strategy, threshold = 0.1, target_indices = None, 
-                 target_vals = None, indices_to_change = None, new_vals = None):
-        self.strategy = strategy
-        self.threshold = threshold
-        self.target_indices = target_indices
-        self.target_vals = target_vals
-        self.indices_to_change = indices_to_change
-        self.new_vals = new_vals
-
-
 class BinaryDataset(Dataset):
-    def __init__(self, source_file, perturb_params, label_col='label', transform=None,
+    def __init__(self, source_file, threshold, label_col='label', transform=None,
              target_transform=None, random_state=-1, feature_type='continuous', add_noise = False):
         data = pd.read_csv(source_file)
         self.labels = pd.DataFrame(data[label_col])
@@ -50,11 +26,11 @@ class BinaryDataset(Dataset):
 
         if add_noise:
             if self.feature_type == 'continuous':
-                self.data = data_utils.perturb_X(self.data, random_state, perturb_params.threshold, min = 0, add_noise = add_noise)
+                self.data = data_utils.perturb_X(self.data, random_state, threshold, min = 0, add_noise = add_noise)
             elif self.feature_type == 'mixed':
-                self.data = data_utils.perturb_X_mixed(self.data, perturb_params, random_state, min = 0, add_noise = add_noise)
+                self.data = data_utils.perturb_X_mixed(self.data, threshold, random_state, min = 0, add_noise = add_noise)
             else:
-                self.data = data_utils.perturb_X_discrete(self.data, perturb_params, random_state, add_noise = add_noise)
+                self.data = data_utils.perturb_X_discrete(self.data, threshold, random_state, add_noise = add_noise)
         
     def __len__(self):
         return len(self.labels)
@@ -81,7 +57,7 @@ class BinaryDataset(Dataset):
         return num
 
 class WhoDataset(Dataset):
-    def __init__(self, source_file, perturb_params, label_col='label', transform=None,
+    def __init__(self, source_file, threshold = 0, label_col='label', transform=None,
              target_transform=None, random_state=-1, feature_type='continuous', add_noise = False):
         data = pd.read_csv(source_file)
         self.labels = pd.DataFrame(data[label_col])
@@ -97,9 +73,9 @@ class WhoDataset(Dataset):
 
         if add_noise:
             if self.feature_type == 'continuous':
-                self.data = data_utils.perturb_X(self.data, random_state, perturb_params.threshold, add_noise=add_noise)
+                self.data = data_utils.perturb_X(self.data, random_state, threshold, add_noise=add_noise)
             else:
-                self.data = data_utils.perturb_X_discrete(self.data, perturb_params, random_state, add_noise = add_noise)
+                self.data = data_utils.perturb_X_discrete(self.data, threshold, random_state, add_noise = add_noise)
 
         
     def __len__(self):
@@ -119,7 +95,7 @@ class WhoDataset(Dataset):
     def num_classes(self):
         return 1 
 
-def load_mnist_data(random_state, perturb_params, add_noise = False):
+def load_mnist_data(random_state, threshold, add_noise = False):
     train = datasets.MNIST(
             root="data",
             train=True,
@@ -143,33 +119,34 @@ def load_mnist_data(random_state, perturb_params, add_noise = False):
     test.data = test.data[idx]
     test.targets[test.targets == 7] = 0
     if add_noise:
-        train.data = data_utils.perturb_X(train.data, random_state, perturb_params.threshold, 0, 255, add_noise=add_noise)
-        test.data = data_utils.perturb_X(test.data, 0, perturb_params.threshold, 0, 255, add_noise = add_noise)
+        train.data = data_utils.perturb_X(train.data, random_state, threshold, 0, 255, add_noise=add_noise)
+        test.data = data_utils.perturb_X(test.data, 0, threshold, 0, 255, add_noise = add_noise)
     return train, test
 
-def load_data(file_base, dataset, scaler, scaler_labels, random_state, params, add_noise = False):
+def load_data(file_base, dataset, scaler, scaler_labels, random_state, threshold, add_noise = False):
     if 'whobin' in dataset:
-        train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state, add_noise=add_noise)
-        test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=-1, add_noise=add_noise)
+        train = BinaryDataset(file_base + '_train.csv', threshold, transform=scaler, random_state=random_state, add_noise=add_noise)
+        test = BinaryDataset(file_base + '_test.csv', threshold, transform=scaler, random_state=-1, add_noise=add_noise)
     elif dataset in ['compas', 'income', 'german', 'german_cor', 'student','heloc', 'adult']:
-        train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state, feature_type='discrete', add_noise=add_noise)
-        test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=-1, feature_type='discrete', add_noise=add_noise)
+        train = BinaryDataset(file_base + '_train.csv', threshold, transform=scaler, random_state=random_state, feature_type='discrete', add_noise=add_noise)
+        test = BinaryDataset(file_base + '_test.csv', threshold, transform=scaler, random_state=-1, feature_type='discrete', add_noise=add_noise)
     elif dataset in ['jordan', 'kuwait']:
-        train = BinaryDataset(file_base + '_train.csv', params, transform=scaler, random_state=random_state, feature_type='mixed', add_noise=add_noise)
-        test = BinaryDataset(file_base + '_test.csv', params, transform=scaler, random_state=-1, feature_type='mixed', add_noise=add_noise)
+        train = BinaryDataset(file_base + '_train.csv', threshold, transform=scaler, random_state=random_state, feature_type='mixed', add_noise=add_noise)
+        test = BinaryDataset(file_base + '_test.csv', threshold, transform=scaler, random_state=-1, feature_type='mixed', add_noise=add_noise)
     elif dataset == 'who':
-        train = WhoDataset(file_base + '_train.csv', params, transform=scaler, target_transform=scaler_labels, random_state=random_state, add_noise=add_noise)
-        test = WhoDataset(file_base + '_test.csv', params, transform=scaler,  target_transform=scaler_labels, random_state=-1, add_noise=add_noise)
+        train = WhoDataset(file_base + '_train.csv', threshold, transform=scaler, target_transform=scaler_labels, random_state=random_state, add_noise=add_noise)
+        test = WhoDataset(file_base + '_test.csv', threshold, transform=scaler,  target_transform=scaler_labels, random_state=-1, add_noise=add_noise)
     else:
-        train, test = load_mnist_data(random_state, params, add_noise=add_noise)
+        train, test = load_mnist_data(random_state, threshold, add_noise=add_noise)
     return train, test
 
-def load_data_simple(file_base, dataset, scaler, random_state, perturb_params, label_col='label'):
+def load_data_simple(file_base, dataset, scaler, random_state, threshold, label_col='label'):
     '''
-    Use with ART when we want entire dataset as a tensor/np array, rather than a dataloader object
+    Use with ART (adversarial training) when we want entire dataset as a tensor/np array, 
+    rather than a dataloader object
     '''
     if dataset == 'mnist':
-        data_train, data_test = load_mnist_data(random_state, perturb_params)
+        data_train, data_test = load_mnist_data(random_state, threshold)
         X_train = data_train.data
         X_test = data_test.data
         y_train = data_train.targets
@@ -186,4 +163,3 @@ def load_data_simple(file_base, dataset, scaler, random_state, perturb_params, l
         X_train = scaler.fit_transform(X_train)
         X_test = scaler.fit_transform(X_test)
     return X_train, np.array(y_train), X_test, np.array(y_test)
-    # return np.matrix(X_train), y_train, np.matrix(X_test), y_test

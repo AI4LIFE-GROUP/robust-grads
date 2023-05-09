@@ -5,7 +5,7 @@
 * [WHO](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who?resource=download)
 * [Adult Income](https://archive.ics.uci.edu/ml/datasets/Adult)
 * [HELOC](https://community.fico.com/s/explainable-machine-learning-challenge)
-
+Data can be downloaded from the above links; then, use the notebooks in `data` to preprocess the data.
 
 The code assumes that there exists `<file_base>_train.csv` and `<file_base>_test.csv` files, where `<file_base>` is the second command-line argument and can be, for example, `data/adult` if the files `data/adult_train.csv` and `data/adult_test.csv` exist. 
 
@@ -15,32 +15,53 @@ Our code relies on standard python libraries like `numpy`, `pandas`, and `pytorc
 ## To replicate our results:
 For the WHO results, run `exps.sh`. CSV files will be saved as `ft_res_who.csv` for fine-tuning (Sec 4.1) and `rt_res_who` for retraining (Sec 4.2). 
 
+For Adult/HELOC - TODO
+
 ## To run custom experiments:
-The code is broken into two pieces. 
+The code is broken into a few pieces, depending on your goals. 
 
-*Training networks* 
-`baseline_experiments.py` trains 100 neural networks and saves their accuracy (train and test), test-set predictions (binary predictions and logits), and test-set gradients in `.npy` files. 
-
-`python3 baseline_experiments.py <dataset> <file_base> <run_id>` 
-
-To streamline fine-tuning experiments, `dataset_shift_exps.py` may also be used.
-
-*Evaluating networks*
-The second piece, `single_comp_metrics.py` post-processes the above files and computes pairwise similarity scores between all 100 models' top-k (k=1,2,3,4,5) feature scores and overall gradients.
-
-`python3 single_comp_metrics.py data_prefix <output_directory> <run_id>` where `data_prefix` is the `.npy` file name up through the file `_`, e.g., `whobin_nn3_relu_t0.1`.
-
-To streamline the post-processing of fine-tuning experiments, use `comp_fs_shift.py`
-
-### Random perturbation
-Given a single dataset, we can add random perturbations to test similarity of models learned across similar datasets.
-
-When running `baseline_experiments.py` include `--threshold=p`. For binary features, this will flip each feature with probability `p`.  For continuous features, this will add Gaussian noise of mean 0, standard deviation `p` to all data. .  
-
-### Temporal or spatial distribution shift
+### Real-world distribution shifts
 The code assumes that there will be two data files, named `filename_orig_train.csv` and `filename_shift_train.csv` (and likewise for the test sets). 
 
-To indicate you are testing dataset shift and that the code should not add random perturbations to the data, use the flag `--dataset-shift=1`. When using this option, additional output files will be generated. 
+#### Retraining models
+Use this section as a guide if you want to compare models that were retrained from scratch.
+
+Start with `baseline_experiments.py` to generate the models, predictions, and test-set gradients. This file can be run as follows:
+
+`python3 baseline_experiments.py <dataset> <file_base> <run_id> --dataset_shift=1`
+
+Dataset is the name of the dataset (e.g., whobin, adult, or heloc). Filebase is the filename up through `_train.csv`. run_id is any unique string corresponding to this set of experiments.
+
+These other parameters can be changed from the defaults, if desired:
+
+*Setup*
+* `--output_dir` default `.`. Where to save output files
+* `--label_col` default `label`. Column name of the output variable in the dataset
+* `--variations` default 10. How many trials to execute
+* `--fixed_seed` default false. If true, use the same random model initialization for the original and shifted models
+
+*Training parameters*
+* `--lr` default 0.2. Learning rate
+* `--lr_decay` default 0.8. Learning rate decay
+* `--epochs` default 20
+* `--batch_size` default 128
+* `--weight_decay` default 0
+* `--dropout` default 0
+* `--optimizer` default none, corresponding to SGD. Other options are `amsgrad` (Adam with amsgrad) or `adam`
+
+*Model architecture*
+* `--nodes_per_layer` default 50. Nodes per hidden layer
+* `--num_layers` default 5. Number of hidden layers
+* `--activation` default relu. Activation function, use `leak` for leaky relu and `soft` for softplus
+* `--beta` default 5. If using softplus, beta parameter
+
+*Extra* These parameters can also be used, but are not used for any of the experiments in the paper.
+* `--adversarial` default false. If true, use adversarial training while training the models
+* `--epsilon` (default 0.5, not used). Epsilon for constructing adversarial examples
+* `--linear` default false. If true, train a linear model instead of a neural network
+
+A number of files will be saved after running `baseline_experiments.py`: model parameters (`.pt` files), accuracy and loss (`.npy` files), and gradients (`.npy` files) for various attribution techniques. 
+Several columns compare different data (original vs shifted), as follows:
 * files with `shiftcompare` in their titles compare the original and updated models directly
 * * files with `shiftcompare` and `full` in the title compare the original and shifted model as evaluated on the updated test dataset
 * * files without `full` compare the models as evaluated on the original test dataset
@@ -48,33 +69,37 @@ To indicate you are testing dataset shift and that the code should not add rando
 * *  Files with `shift` in the title use the updated test data to evaluate the models trained on the updated training data 
 * * The `orig` files use the original test data to evaluate the models trained using the original training data
 
-### Additional command-line parameters for `baseline_experiments.py`:
-* `--adversarial` default False. If true, do adversarial training
-* `--output_dir` specify where to save output files, default `.`
-* `--label_col` label for output variable in dataset, default `label`
-* `--lr` learning rate
-* `--lr_decay` learning rate decay
-* `epochs` 
-* `--batch_size`
-* `--activation` activation function (relu is default, `leak` for leaky relu and `soft` for softplus with beta=5 are also accepted)
-* `--nodes_per_layer` number of nodes in each hidden layer
-* `--num_layers` number of hidden layers
-* `--optimizer` what optimizer to use, default is sgd, `amsgrad` and `adam` are also supported
-* `--fixed_seed` if true, initialize all 100 neural nets using the same random seed (0). default False
-* `--threshold` what fraction of the data to perturb (for binary datasets, this means we flip each feature with this probability)
-* `--epsilon` epsilon to use in adversarial training
-* `--dropout` how much dropout to use in training? default 0.
-* `--dataset_shift` if true, compare an old and updated dataset 
+To post-process these files into useful data, run `single_comp_metrics.py`, as follows:
 
-These are not currently used in my experiments, but could be of use if we want to target dataset shifts or uncertainty to a subset of the dataset.
-* `--target_indices` if only changing a subset of the data, what columns to look at to determine eligibility? Not currently used in experiments.
-* `--target_vals` if only changing a subset of the data, what values should target_indices have to be included? Not currently used in experiments.
-* `--indices_to_change` What indices can be modified?
-* `--new_vals` If categorical, what values to change these indices to?
-* `--strategy` default random. Other options are targeted or targeted-random. Not used so need to check code on definitions of each.
- 
+`python3 single_comp_metrics.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn> --epochs <e1> <e2>`
 
-## Notes about the results
-For most results we only consider parameter settings that result in good accuracy. Intuitively, if one model of the 100 has low accuracy, there is more space for it to disagree with other models, so the discrepancy metrics may be inflated. 
+files_location is where all of the `.npy` files live, i.e., the `output_dir` parameter from `baseline_experiments.py` (default `.`). output_file is the name of the csv file in which to store the results. `--run_id` takes a list of `run_id`'s from potentially multiple runs of `baseline_experiments.py` with different settings (however, all trials must have same `dataset_shift` value and `fixed_seed` value). Epochs is a list of epochs at which data was recorded (ascending order)
 
-There was previously a bug where continuous data was not modified with Gaussian noise -- instead, the provided propotion (via the threshold argument) was set to 0. These results have been moved to the `old` directory within the `results` folder in case we ever want to come back to them.
+`single_comp_metrics.py` will save a CSV file containing aggregate information about explanation robustness. 
+
+#### Fine-tuning models
+Use `dataset_shift_exp.py` to run fine-tuning experiments on real-world data shifts.
+
+`python3 dataset_shift_exp.py <dataset> <file_base> <run_id>`
+
+The same command-line parameters as for `baseline_experiments.py` can be used, and have the same defaults, except for `--epochs` whose default is 1000. There is one additional command-line parameter, `--finetune_epochs` (default 250), which is the number of additional epochs for fine-tuning.
+
+To post-process the raw output, run `comp_fs_shift.py`, e.g.,
+
+`python3 comp_fs_shift.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn>`
+
+### Synthetic dataset shift (Gaussian noise)
+#### Retraining models
+To compare models that are retrained from scratch, follow the same results as for real-world dataset shift retrained models (i.e., run `baseline_experiments.py` as described above, but omit the `dataset_shift` command-line parameter.)
+
+These additional command-line parameters will be useful.
+* `--threshold` default 0. Standard deviation of gaussian noise to add (for continuous features), or probability of modifying each feature (for binary features)
+* `--base_repeats` default 10. How many "base models" to average over. The usage depends on whether `--fixed_seed` is true
+* * For example, if fixed_seed is false, `--variations=5` and `--base_repeats=10`, we will train 10 base models and 5 modified models, for a total of 15 models. We compare each of the modified models with each of the base models. All 15 models that we train will use different random initializations.
+* * For example, if `--fixed_seed=1`, `--variations=5`, and `--base_repeats=10`, we will train 10 base models and 5 modified models for each base model, for a total of 60 models. Each base model will be trained using a different model initialization, and all of the 5 modified models corresponding to it will use the same model initialization.
+
+
+#### Fine-tuning models
+TODO
+
+

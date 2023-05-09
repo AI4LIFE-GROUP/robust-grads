@@ -11,7 +11,7 @@ from captum.attr import LimeBase
 from captum.attr import KernelShap
 from captum._utils.models.linear_model import SkLearnLinearModel
 
-# import adversarial
+import adversarial
 
 def train_loop(dataloader, model, loss_fn, optimizer, scheduler, printmode=False):
     size = len(dataloader.dataset)
@@ -388,12 +388,9 @@ def dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondar
         
         train_acc, train_loss = train_loop(train_dataloader, model, params.loss_fn, optimizer, scheduler, printmode)
         test_acc, test_loss = test_loop(test_dataloader, model, params.loss_fn, printmode)
-        # if params.lr_decay is not None:
-        #     for g in optimizer.param_groups:
-        #         g['lr'] = g['lr'] * params.lr_decay
 
         #if ((t+1) % 5 == 0) or (t == 0) or (t == 1) or (t == 4):
-        if ((t + 1) == (epochs+1)):
+        if ((t + 1) == (epochs)):
             start_str = output_dir + "/results_" + run_id + "_e" + str(t+1) + "_" 
             # if looking at dataset shift, compute test stats on the same dataset (test/secondary) 
             # and also on the backup dataset

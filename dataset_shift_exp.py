@@ -7,12 +7,12 @@ import data_utils
 import datasets
 import training
 
-# LINEAR MODELS - see linear_model.py
-# NEURAL ARCHITECTURE - see neural_net.py
+'''
+    Run fine-tuning experiments on a real-world dataset shift.
 
-'''' fuck this is annoying.
-TO DO: for dataset shift we want to train 100 models of each orig and shift.
-Then compare across each set of models (compare RS 0 with RS0, etc.) ugghhhh'''
+    To run retraining experiments, use baseline_experiments.py instead.
+    To run experiments with synthetic noise, use baseline_experiments.py instead.
+'''
 
 def main(args):
 
@@ -21,12 +21,11 @@ def main(args):
     test_accuracy, train_accuracy, secondary_accuracy = [], [], []
     test_acc_shift, train_acc_shift, sec_acc_shift = [], [], []
     all_train_loss, all_test_loss, all_train_shift_loss, all_test_shift_loss = [], [], [], []
-    perturb_params = datasets.PerturbParams(args.strategy, 0, args.target_indices, args.target_vals,
-                    args.indices_to_change, args.new_vals)
 
-    base_iter = 0
+
     finetune = args.finetune
     orig_run_id = args.run_id
+
     for r in random_states:
         args.run_id = orig_run_id
 
@@ -34,13 +33,13 @@ def main(args):
         print("Working with r=",str(r))
 
         scaler = data_utils.get_scaler(pd.read_csv(args.file_base + '_train.csv').drop(
-                columns=[args.label_col]), perturb_params, random_state=r, add_noise=False)
+                columns=[args.label_col]), args.threshold, random_state=r, add_noise=False)
         scaler_labels = None
-        train, test = datasets.load_data(args.file_base, args.dataset, scaler, scaler_labels, r, perturb_params, add_noise=False)
+        train, test = datasets.load_data(args.file_base, args.dataset, scaler, scaler_labels, r, args.threshold, add_noise=False)
 
         sec_name = args.dataset.replace('orig', 'shift')
         file_base = args.file_base.replace('orig', 'shift')
-        shifted_train, shifted_test = datasets.load_data(file_base, sec_name, scaler, scaler_labels, r, perturb_params, add_noise=False)
+        shifted_train, shifted_test = datasets.load_data(file_base, sec_name, scaler, scaler_labels, r, args.threshold, add_noise=False)
 
         num_feat = train.num_features()
         num_classes = train.num_classes()
@@ -51,23 +50,23 @@ def main(args):
                         weight_decay = args.weight_decay)
         
         if args.adversarial:
-            #pass
-            model, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
         else:
-            model, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
         test_accuracy.append(test_acc)
         train_accuracy.append(train_acc)
         secondary_accuracy.append(sec_acc)
         all_train_loss.append(train_loss)
         all_test_loss.append(test_loss)
-        if args.finetune:
-            params.epochs = args.finetune_epochs
-            params.learning_rate = args.lr * (0.4)
+        
+
+        params.epochs = args.finetune_epochs
+        params.learning_rate = args.lr * (0.4)
         args.run_id += "_shifted"
         if args.adversarial:
-            model, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, shifted_train, shifted_test, r, args.dataset, args.output_dir, args.run_id, test, finetune=finetune)
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, shifted_train, shifted_test, r, args.dataset, args.output_dir, args.run_id, test, finetune=finetune)
         else:
-            model, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, shifted_train, shifted_test, r, args.dataset, args.output_dir, args.run_id, test, finetune=finetune)
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, shifted_train, shifted_test, r, args.dataset, args.output_dir, args.run_id, test, finetune=finetune)
 
         test_acc_shift.append(test_acc)
         train_acc_shift.append(train_acc)
@@ -109,8 +108,7 @@ if __name__ == "__main__":
     parser.add_argument('dataset', type=str)
     parser.add_argument('file_base', type=str, help='file path of dataset through _train or _test')
     parser.add_argument('run_id', type=str)
-    parser.add_argument('--variations', type=int, default=100) # how many models to compare, total?
-    parser.add_argument('--dataset_shift', type=bool, default=True)
+    parser.add_argument('--variations', type=int, default=10) # how many models to compare, total?
     parser.add_argument('--adversarial', type=bool, default=False)
     parser.add_argument('--output_dir', type=str, default='.')
     parser.add_argument('--label_col', default='label', type=str)
@@ -118,49 +116,25 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=0.2)
     parser.add_argument('--lr_decay', type=float, default=0.8)
     parser.add_argument('--weight_decay', type=float, default=0.0)
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=1000)
     parser.add_argument('--finetune_epochs', type=int, default=250)
-    parser.add_argument('--batch_size', type=int, default=40000)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--activation', type=str, default='relu')
     parser.add_argument('--nodes_per_layer', type=int, default=50)
     parser.add_argument('--num_layers', type=int, default=5)
     parser.add_argument('--optimizer', type=str, default=None)
     parser.add_argument('--fixed_seed', type=bool, default=False) # if true, use seed 0 for all random states
-    parser.add_argument('--finetune', type=bool, default = False)
 
-    parser.add_argument('--target_indices', type=str, default='') # if only changing a subset of data, what criteria to use
-    parser.add_argument('--target_vals', type=str, default='')
-    parser.add_argument('--indices_to_change', type=str, default='') # what indices to change?
-    parser.add_argument('--new_vals', type=str, default='') # what can we change modified values to?
-    parser.add_argument('--strategy', type=str, default='random')
     parser.add_argument('--epsilon', type=float, default=0.5) # epsilon for finding adv. examples
     parser.add_argument('--dropout', type=float, default=0.0) # dropout rate
     parser.add_argument('--beta', type=float, default=5) # beta for softplus
 
     args = parser.parse_args()
-    if args.target_indices == '':
-        args.target_indices = []
-        args.target_vals = []
-    else:
-        args.target_indices = list(map(int, args.target_indices.split("_")))
-        args.target_vals = list(map(float, args.target_vals.split("_")))
-    if args.indices_to_change == '':
-        args.indices_to_change = []
-        args.new_vals = []
-    else:    
-        args.indices_to_change = list(map(int, args.indices_to_change.split("_")))
-        args.new_vals = list(map(float, args.new_vals.split("_")))
+    args.finetune = True
+    args.dataset_shift = True
+    args.threshold = 0 # do not add random noise to data
 
-    assert len(args.target_indices) == len(args.target_vals), 'target_indices and target_vals must be the same length'
-    assert len(args.indices_to_change) == len(args.new_vals), 'indices_to_change and new_vals must be the same length'
-    strategies = ['random', 'targeted', 'untargeted', 'targeted-random', 'none']
-    args.strategy = str.strip(args.strategy)
-    assert args.strategy in strategies, 'strategy must be in [' + ' '.join(strategies) + '] but is ' + args.strategy
-
-    if args.dataset in ['mnist']: 
-        args.loss = nn.MSELoss() 
-    else:
-        args.loss = nn.CrossEntropyLoss()         
+    args.loss = nn.CrossEntropyLoss()         
 
     if args.activation is not None:
         if args.activation == 'leak':
@@ -172,10 +146,7 @@ if __name__ == "__main__":
     else:
         args.activation = nn.ReLU()
 
-    args.orig_dataset_shift = False
     args.shifted_dataset_shift = False
-    # if we are testing dataset shift (rather than random perturbation), 
-    # call the remaining code 2x, once on original data and once on shifted data
     args.orig_dataset_shift = True
     args.dataset = args.dataset + '_orig'
     args.file_base = args.file_base + '_orig'

@@ -35,92 +35,52 @@ def perturb_X(X, random_state, std_dv, min = None, max = None, add_noise = False
         
     return X
 
-def satisfies(X, row, target_ind, target_val):
-    for i in range(len(target_ind)):
-        if X[row, target_ind[i]] != target_val[i]:
-            return False
-    return True
-
-def perturb_X_mixed(X, params, random_state, min=None, max=None, add_noise = False):
+def perturb_X_mixed(X, threshold, random_state, min=None, max=None, add_noise = False):
     ''' 
     Use when some features of X are binary while others are continuous
     '''
     random.seed = random_state
-    torch.manual_seed(random_state)
     X = np.matrix(X)
 
     if add_noise:
-        if params.strategy == 'random':
-            for col in range(X.shape[1]):
-                
-                unique =  np.unique(np.round(X[:,col],5).T.tolist()[0])
-                if len(unique) == 2:
-                    binary = True
-                else:
-                    binary = False
-                for row in range(X.shape[0]):
-                    if random.random() < params.threshold:
-                        if binary:
-                            if X[row,col] == 0:
-                                X[row,col] = 1
-                            else:
-                                X[row,col] = 0
+        for col in range(X.shape[1]):
+            
+            unique =  np.unique(np.round(X[:,col],5).T.tolist()[0])
+            if len(unique) == 2:
+                binary = True
+            else:
+                binary = False
+            for row in range(X.shape[0]):
+                if random.random() < threshold:
+                    if binary:
+                        if X[row,col] == 0:
+                            X[row,col] = 1
                         else:
-                            perturbation = torch.normal(torch.zeros(1), params.threshold * torch.ones_like(torch.tensor(1)))
-                            X[row,col] = X[row,col] + perturbation
+                            X[row,col] = 0
+                    else:
+                        perturbation = torch.normal(torch.zeros(1), threshold * torch.ones_like(torch.tensor(1)))
+                        X[row,col] = X[row,col] + perturbation
 
-                            if (min is not None) or (max is not None):
-                                X[row,col] = torch.clamp(torch.tensor(X[row,col]), min, max)
-        else:
-            print("ERROR: perturbation strategies other than random are not implemented yet for mixed datasets ")
+                        if (min is not None) or (max is not None):
+                            X[row,col] = torch.clamp(torch.tensor(X[row,col]), min, max)
     return np.array(X)
 
-def perturb_X_discrete(X, params, random_state, add_noise = False):
+def perturb_X_discrete(X, threshold, random_state, add_noise = False):
     # Perturb X when all features are binary (0/1)
     # threshold in [0,1] is the fraction of features we will change
     random.seed(random_state)
     X = np.matrix(X)
     if add_noise:
-        if params.strategy == 'random':
-            for row in range(X.shape[0]):
-                for col in range(X.shape[1]):
-                    if random.random() < params.threshold:
-                        if X[row,col] == 0:
-                            X[row,col] = 1
-                        else:
-                            X[row,col] = 0
-        elif params.strategy == 'untargeted':
-            indices_to_change, new_vals = params.indices_to_change, params.new_vals
-
-            for row in range(X.shape[0]):
-                if random.random() < params.threshold:
-                    for i in range(len(indices_to_change)):
-                        X[row,indices_to_change[i]] = new_vals[i]
-        elif params.strategy == 'targeted-random':
-            target_indices, target_vals = params.target_indices, params.target_vals
-
-            for row in range(X.shape[0]):
-                if satisfies(X, row, target_indices, target_vals):
-                    for col in range(X.shape[1]):
-                        if random.random() < params.threshold:
-                            if X[row,col] == 0:
-                                X[row,col] = 1
-                            else:
-                                X[row,col] = 0
-        elif params.strategy == 'targeted':
-            target_indices, target_vals = params.target_indices, params.target_vals
-            indices_to_change, new_vals = params.indices_to_change, params.new_vals
-            
-            for row in range(X.shape[0]):
-                if satisfies(X, row, target_indices, target_vals):
-                    if random.random() < params.threshold:
-                        for i in range(len(indices_to_change)):
-                            X[row,indices_to_change[i]] = new_vals[i]
-        else:
-            print("ERROR: perturbation strategy must be one of 'random', 'targeted', or 'untargeted' ")
+        for row in range(X.shape[0]):
+            for col in range(X.shape[1]):
+                if random.random() < threshold:
+                    if X[row,col] == 0:
+                        X[row,col] = 1
+                    else:
+                        X[row,col] = 0
     return np.array(X)
 
-def get_scaler(X, perturb_params, random_state=0, min_val = None, max_val = None, add_noise = False):
+def get_scaler(X, threshold, random_state=0, min_val = None, max_val = None, add_noise = False):
     ''' 
     Returns a StandardScaler object fitted to the perturbed version of the
     dataset X, where X's features are continuous.
@@ -128,32 +88,32 @@ def get_scaler(X, perturb_params, random_state=0, min_val = None, max_val = None
     if type(X) == type(pd.DataFrame()):
         X = torch.tensor(np.matrix(X))
     if add_noise:
-        X = perturb_X(X, random_state, perturb_params.threshold, min=min_val, max=max_val, add_noise = add_noise)
+        X = perturb_X(X, random_state, threshold, min=min_val, max=max_val, add_noise = add_noise)
     scaler = StandardScaler().fit(X)
 
     return scaler
 
-def get_scaler_discrete(X, perturb_params, random_state=0, add_noise=False):
+def get_scaler_discrete(X, threshold, random_state=0, add_noise=False):
     '''
     Returns a StandardScaler object fitted to the perturbed version of the 
     dataset X, where X's features are discrete.
     '''
     if type(X) == type(pd.DataFrame()):
         X = torch.tensor(np.matrix(X))
-    if add_noise and not (perturb_params.strategy == 'none'):
-        X = perturb_X_discrete(X, perturb_params, random_state, add_noise = add_noise)
+    if add_noise:
+        X = perturb_X_discrete(X, threshold, random_state, add_noise = add_noise)
     scaler = StandardScaler().fit(X)
     return scaler, None
 
-def get_scaler_mixed(X, perturb_params, random_state = 0, min_val=None, max_val=None, add_noise = False):
+def get_scaler_mixed(X, threshold, random_state = 0, min_val=None, max_val=None, add_noise = False):
     '''
     Returns a StandardScaler object fitted to the perturbed version of the 
     dataset X, where X's features are mixed continuous and discrete.
     '''
     if type(X) == type(pd.DataFrame()):
         X = torch.tensor(np.matrix(X))
-    if add_noise and not (perturb_params.strategy == 'none'):
-        X = perturb_X_mixed(X, perturb_params, random_state, min=min_val, max=max_val, add_noise=add_noise)
+    if add_noise:
+        X = perturb_X_mixed(X, threshold, random_state, min=min_val, max=max_val, add_noise=add_noise)
     scaler = StandardScaler().fit(X)
     return scaler, None
 
