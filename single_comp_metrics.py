@@ -153,7 +153,7 @@ def top_k_ssd(k, x, y, signs_x, signs_y):
     scores = np.logical_and(frac_right, cdc)
     return sum(scores)/len(scores)
 
-def add_tops_shift(filename_orig, filename_shift, n, lime_epoch):
+def add_tops_shift(filename_orig, filename_shift, n, lime_epoch, fixed_seed):
     full_res = []
     if lime_epoch:
         metric_names = ['gradients', 'salience', 'smoothgrad', 'lime', 'shap']
@@ -169,7 +169,10 @@ def add_tops_shift(filename_orig, filename_shift, n, lime_epoch):
 
         for idx in range(n):
             g1 = np.load(filename_orig + name + str(idx) + ".npy")
-            g2 = np.load(filename_shift + name + str(idx) + ".npy")
+            if fixed_seed:
+                g2 = np.load(filename_shift + name + str(idx) + ".npy")
+            else:
+                g2 = np.load(filename_shift + name + str(idx+n) + ".npy")
             
             s1 = np.sign(g1)
             s2 = np.sign(g2)
@@ -326,7 +329,6 @@ def process_random_seed(args):
     filebase = args.filebase
     dataset_shift = False
     columns = get_columns(args, dataset_shift)
-    print(len(columns))
     all_res = []
     for run_id in args.run_id:
         params = collect_params(args.filebase, run_id)
@@ -337,19 +339,14 @@ def process_random_seed(args):
         nodes_per_layer, num_layers = params[12], params[13]
         epsilon, beta, finetune = params[14], params[15], params[16]
 
-        if dataset_shift:
-            print("Dataset shift not implemented for random seed")
-        else:
-            test, train = get_filename_acc(filebase, run_id)
-            test_loss, train_loss = get_filename_loss(filebase, run_id)
+
+        test, train = get_filename_acc(filebase, run_id)
+        test_loss, train_loss = get_filename_loss(filebase, run_id)
         if test.split("/")[-1] not in os.listdir(filebase):
             continue
         test_acc, train_acc = np.matrix(np.load(test)), np.matrix(np.load(train))
         avg_test, avg_train = np.average(test_acc, axis=0), np.average(train_acc, axis=0)
         train_loss, test_loss = np.load(train_loss), np.load(test_loss)
-
-        if dataset_shift:
-            print("Dataset shift not implemented for random seed")
 
         for iter in range(base_repeats):
             for ep_idx in range(len(args.epochs)):
@@ -388,7 +385,7 @@ def process_random_seed(args):
                 all_res.append(new_res)
 
     df = pd.DataFrame(all_res, columns=columns)
-    df.to_csv(args.outputfile, index=False)
+    df.to_csv(args.outputfile + ".csv", index=False)
 
 def process_fixed_seed(args, finetune):
     filebase = args.filebase
@@ -455,13 +452,14 @@ def process_fixed_seed(args, finetune):
     df = pd.DataFrame(all_res,columns=columns)
     df.to_csv(args.outputfile + ".csv", index=False)
 
-def process_fixed_seed_shift(args, finetune):
+def process_shift(args, finetune):
     filebase = args.filebase
     columns = get_columns(args, True)
     all_res = []
     for run_id in args.run_id:
         params = collect_params(args.filebase, run_id)
         dataset, threshold, adversarial = params[0], params[1], params[2]
+        fixed_seed = (params[4] == "True")
         n = int(params[6]) # n = num variations
         activation = params[7]
         lr, lr_decay, weight_decay = params[8], params[9], params[10]
@@ -497,7 +495,7 @@ def process_fixed_seed_shift(args, finetune):
 
             
             new_res = [dataset, 0, epoch, threshold, adversarial, 1, n, activation, lr, lr_decay, weight_decay,
-                        nodes_per_layer, num_layers, epsilon, beta, params[16]] # 16 columns
+                        nodes_per_layer, num_layers, epsilon, beta, params[16]] 
 
             # add accuracy metrics
             targets_avg = [avg_train_shift, avg_test_shift, avg_train_orig, avg_test_orig]
@@ -511,14 +509,12 @@ def process_fixed_seed_shift(args, finetune):
             for tar in targets: # 4 columns
                 new_res.append(tar[ep_idx])
 
-            # 44 columns so far
-
             # add top-k and gradient norm comparisons
             if finetune:
                 filename_shift = get_filename(filebase, run_id, epoch, shift='shift')
                 filename_shift_full = get_filename(filebase, run_id, epoch, shift='shift_full')
-            new_res.extend(add_tops_shift(filename, filename_shift, n, (epoch in args.lime_epochs)))
-            new_res.extend(add_tops_shift(filename_orig_full, filename_shift_full, n, (epoch in args.lime_epochs)))
+            new_res.extend(add_tops_shift(filename, filename_shift, n, (epoch in args.lime_epochs), fixed_seed))
+            new_res.extend(add_tops_shift(filename_orig_full, filename_shift_full, n, (epoch in args.lime_epochs), fixed_seed))
             all_res.append(new_res)
     df = pd.DataFrame(all_res,columns=columns)
     df.to_csv(args.outputfile + ".csv", index=False)
@@ -531,23 +527,17 @@ def collect_params(filepath, run_id):
     return params
 
 def main(args):
-    # check fixed seed and datasetshift - need to be consistent right now across all runs
     params = collect_params(args.filebase, args.run_id[0])
+    finetune = (params[16] == "True")
     if params[3] == 'True':
-        dataset_shift = True
-    else:
-        dataset_shift = False
-    if params[16] == 'True':
-        finetune = True
-    else:
-        finetune = False
-    if dataset_shift:
-        process_fixed_seed_shift(args, finetune)
-    elif params[4] == 'True':
+        # real-world dataset shift
+        process_shift(args, finetune)
+    elif params[4] == "True":
         # fixed seed
-        process_fixed_seed(args, finetune) 
+        process_fixed_seed(args, finetune)
     else:
-        process_random_seed(args) # for now, assume no dataset shift
+        # random seed
+        process_random_seed(args)
 
 if __name__ == "__main__":
     
@@ -556,8 +546,10 @@ if __name__ == "__main__":
     parser.add_argument('outputfile', type=str) # don't include .csv extension
     parser.add_argument('--run_id', type=str, nargs='+')
     parser.add_argument('--epochs', type=int, nargs='+', help="all epochs we collected data for in ascending order")
+    parser.add_argument('--lime_epochs', type=int, nargs='+', default=None, help="epochs we collected lime data for in ascending order")
 
     args = parser.parse_args()
-    args.lime_epochs = args.epochs # for now, assume lime epochs are the same as the epochs
+    if args.lime_epochs is None:
+        args.lime_epochs = args.epochs 
     args.max_epochs = args.epochs[-1]
     main(args)

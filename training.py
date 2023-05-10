@@ -7,11 +7,12 @@ import neural_net
 import linear_model
 
 class Params():
-    def __init__(self, lr, lr_decay, epochs, batch_size, loss_fn, num_feat, num_classes, activation, nodes_per_layer, 
-                 num_layers, optimizer = None, seed = 0, epsilon=0.2, dropout=0.0, weight_decay=0):
+    def __init__(self, lr, lr_decay, epochs, lime_epochs, batch_size, loss_fn, num_feat, num_classes, activation, nodes_per_layer, 
+                 num_layers, optimizer = None, seed = 0, epsilon=0.2, dropout=0.0, weight_decay=0, step_size = 40, gamma=0.95):
         self.learning_rate = lr
         self.lr_decay = lr_decay
         self.epochs = epochs
+        self.lime_epochs = lime_epochs
         self.batch_size = batch_size
         self.loss_fn = loss_fn
         self.num_feat = num_feat
@@ -24,6 +25,8 @@ class Params():
         self.epsilon = epsilon
         self.dropout = dropout
         self.weight_decay = weight_decay
+        self.step_size = step_size
+        self.gamma = gamma
 
 
 def train_linear_models(args, train, test, random_state):

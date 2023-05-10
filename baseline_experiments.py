@@ -10,15 +10,21 @@ import training
 # NEURAL ARCHITECTURE - see neural_net.py
 
 def main(args):
-    if args.fixed_seed == False:
-        # we need args.variations # of base models and then args.base_repeats # of comparison models total
-        random_states = [x for x in range(args.variations + args.base_repeats)]
-    elif args.dataset_shift == True:
-        random_states = [x for x in range(args.variations)] # no ``base models'', exactly
+    if args.dataset_shift:
+        if args.fixed_seed:
+            random_states = [x for x in range(args.variations)]
+        else:
+            if 'orig' in args.dataset:
+                random_states = [x for x in range(args.variations)]
+            else:
+                random_states = [x + args.variations for x in range(args.variations)]
     else:
-        # fixed seed 
-        # we need args.variations # of base models and then args.base_repeats # of comparison models for each
-        random_states = [x for x in range((args.variations + 1)*args.base_repeats)]
+        if args.fixed_seed:
+            # we need args.variations # of base models and then args.base_repeats # of comparison models for each
+            random_states = [x for x in range((args.variations + 1)*args.base_repeats)]     
+        if args.fixed_seed == False:
+            # we need args.variations # of base models and then args.base_repeats # of comparison models total
+            random_states = [x for x in range(args.variations + args.base_repeats)]        
 
     test_accuracy, train_accuracy, secondary_accuracy = [], [], []
 
@@ -61,7 +67,7 @@ def main(args):
         num_feat = train.num_features()
         num_classes = train.num_classes()
 
-        params = training.Params(args.lr, args.lr_decay, args.epochs, args.batch_size, loss_fn=args.loss, num_feat=num_feat, 
+        params = training.Params(args.lr, args.lr_decay, args.epochs, args.lime_epochs, args.batch_size, loss_fn=args.loss, num_feat=num_feat, 
                         num_classes=num_classes, activation=args.activation, nodes_per_layer=args.nodes_per_layer,
                         num_layers=args.num_layers, optimizer=args.optimizer, seed=seed, epsilon = args.epsilon, dropout= args.dropout,
                         weight_decay = args.weight_decay)
@@ -102,7 +108,7 @@ def main(args):
         act = "soft"
     params = [args.dataset, args.threshold, args.adversarial, args.dataset_shift, args.fixed_seed, 
                 args.base_repeats, args.variations, act, args.lr, args.lr_decay, args.weight_decay, 
-                args.epochs, args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, args.finetune]
+                max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, args.finetune]
     np.save(args.output_dir + "/params_" + args.run_id + ".npy", params)
     if args.dataset_shift:
         if 'orig' in args.dataset:
@@ -129,7 +135,8 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=0.2)
     parser.add_argument('--lr_decay', type=float, default=0.8)
     parser.add_argument('--weight_decay', type=float, default=0.0)
-    parser.add_argument('--epochs', type=int, default=20)
+    parser.add_argument('--epochs', type=int, default=[20], nargs='+')
+    parser.add_argument('--lime_epochs', type=int, default=None, nargs='+')
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--activation', type=str, default='relu')
     parser.add_argument('--nodes_per_layer', type=int, default=50)
@@ -157,6 +164,8 @@ if __name__ == "__main__":
     else:
         args.activation = nn.ReLU()
 
+    if args.lime_epochs is None:
+        args.lime_epochs = args.epochs
     args.orig_dataset_shift = False
     args.shifted_dataset_shift = False
     # if we are testing dataset shift (rather than random perturbation), 
