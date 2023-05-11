@@ -3,10 +3,10 @@ import numpy as np
 import pandas as pd
 from torch import nn
 
-import data_utils
-import datasets
+import utils.data_utils as data_utils
+import utils.datasets as datasets
 import training
-import parser_utils
+import utils.parser_utils as parser_utils
 
 '''
     Run fine-tuning experiments on a real-world dataset shift.

@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 
-import data_utils
+import utils.data_utils as data_utils
 
 class BinaryDataset(Dataset):
     def __init__(self, source_file, threshold, label_col='label', transform=None,

@@ -3,9 +3,9 @@ import numpy as np
 import pandas as pd
 from torch import nn
 
-import data_utils
-import datasets
-import parser_utils
+import utils.data_utils as data_utils
+import utils.datasets as datasets
+import utils.parser_utils as parser_utils
 import training
 
 # NEURAL ARCHITECTURE - see neural_net.py
