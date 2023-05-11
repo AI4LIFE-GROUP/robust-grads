@@ -21,7 +21,7 @@ def create_parser():
     parser.add_argument('--nodes_per_layer', type=int, default=50)
     parser.add_argument('--num_layers', type=int, default=5)
     parser.add_argument('--optimizer', type=str, default=None)
-    parser.add_argument('--fixed_seed', type=bool, default=False) # if true, use seed 0 for all random states
+    parser.add_argument('--fixed_seed', type=bool, default=False) 
 
 
     parser.add_argument('--epsilon', type=float, default=0.5) # epsilon for finding adv. examples
@@ -44,14 +44,11 @@ def add_retraining_args(parser):
     parser.add_argument('--finetune', type=bool, default = False)
     parser.add_argument('--threshold', type=float, default = 0.0, help='Standard deviation of noise (for gaussian noise on real-valued data) or probability that a feature si flipped (binary data)')
     
-    # TODO finetune epochs param (for synthetic noise fine-tuning)
     return parser
 
 def process_args(args):
-    # set loss. Right now, only support cross entropy
     args.loss = nn.CrossEntropyLoss()         
 
-    # set activation function
     if args.activation is not None:
         if args.activation == 'leak':
             args.activation = nn.LeakyReLU()
