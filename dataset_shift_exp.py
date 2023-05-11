@@ -6,6 +6,7 @@ from torch import nn
 import data_utils
 import datasets
 import training
+import parser_utils
 
 '''
     Run fine-tuning experiments on a real-world dataset shift.
@@ -44,7 +45,7 @@ def main(args):
         num_feat = train.num_features()
         num_classes = train.num_classes()
 
-        params = training.Params(args.lr, args.lr_decay, args.epochs, args.batch_size, loss_fn=args.loss, num_feat=num_feat, 
+        params = training.Params(args.lr, args.lr_decay, args.epochs, args.lime_epochs, args.batch_size, loss_fn=args.loss, num_feat=num_feat, 
                         num_classes=num_classes, activation=args.activation, nodes_per_layer=args.nodes_per_layer,
                         num_layers=args.num_layers, optimizer=args.optimizer, seed=seed, epsilon = args.epsilon, dropout= args.dropout,
                         weight_decay = args.weight_decay)
@@ -61,6 +62,7 @@ def main(args):
         
 
         params.epochs = args.finetune_epochs
+        params.lime_epochs = args.lime_finetune_epochs
         params.learning_rate = args.lr * (0.4)
         args.run_id += "_shifted"
         if args.adversarial:
@@ -97,55 +99,23 @@ def main(args):
     np.save(args.output_dir + "/loss_test_shifted_" + args.run_id + ".npy", all_test_shift_loss)
     params = [args.dataset, 0, args.adversarial, args.dataset_shift, args.fixed_seed, 
                 1, args.variations, act, args.lr, args.lr_decay, args.weight_decay, 
-                args.epochs, args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, args.finetune]
+                max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, args.finetune]
     np.save(args.output_dir + "/params_" + args.run_id + ".npy", params)
 
 
     return 1
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('dataset', type=str)
-    parser.add_argument('file_base', type=str, help='file path of dataset through _train or _test')
-    parser.add_argument('run_id', type=str)
-    parser.add_argument('--variations', type=int, default=10) # how many models to compare, total?
-    parser.add_argument('--adversarial', type=bool, default=False)
-    parser.add_argument('--output_dir', type=str, default='.')
-    parser.add_argument('--label_col', default='label', type=str)
-
-    parser.add_argument('--lr', type=float, default=0.2)
-    parser.add_argument('--lr_decay', type=float, default=0.8)
-    parser.add_argument('--weight_decay', type=float, default=0.0)
-    parser.add_argument('--epochs', type=int, default=1000)
-    parser.add_argument('--finetune_epochs', type=int, default=250)
-    parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--activation', type=str, default='relu')
-    parser.add_argument('--nodes_per_layer', type=int, default=50)
-    parser.add_argument('--num_layers', type=int, default=5)
-    parser.add_argument('--optimizer', type=str, default=None)
-    parser.add_argument('--fixed_seed', type=bool, default=False) # if true, use seed 0 for all random states
-
-    parser.add_argument('--epsilon', type=float, default=0.5) # epsilon for finding adv. examples
-    parser.add_argument('--dropout', type=float, default=0.0) # dropout rate
-    parser.add_argument('--beta', type=float, default=5) # beta for softplus
+    parser = parser_utils.create_parser()
 
     args = parser.parse_args()
+
     args.finetune = True
     args.dataset_shift = True
     args.threshold = 0 # do not add random noise to data
 
-    args.loss = nn.CrossEntropyLoss()         
-
-    if args.activation is not None:
-        if args.activation == 'leak':
-            args.activation = nn.LeakyReLU()
-        elif args.activation == 'soft':
-            args.activation = nn.Softplus(beta=args.beta)
-        else:
-            args.activation = nn.ReLU()
-    else:
-        args.activation = nn.ReLU()
-
+    args = parser_utils.process_args(args)
+    
     args.shifted_dataset_shift = False
     args.orig_dataset_shift = True
     args.dataset = args.dataset + '_orig'

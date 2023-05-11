@@ -90,7 +90,7 @@ def add_tops_shift(filename_orig, filename_shift, n):
 
 
 def get_columns(args, dataset_shift):
-    columns = ['dataset', 'iteration', 'epochs', 'threshold', 'adversarial', 'fixed_seed', 'variations', 'activation',
+    columns = ['dataset', 'iteration', 'epochs', 'finetune_epochs', 'threshold', 'adversarial', 'fixed_seed', 'variations', 'activation',
                 'lr', 'lr_decay', 'weight_decay', 'nodes_per_layer', 'num_layers', 'epsilon', 'beta', 'finetune']
 
     options = ['train_shift', 'test_shift']
@@ -116,7 +116,7 @@ def get_columns(args, dataset_shift):
 
         
 
-def process_fixed_seed_shift(args, finetune):
+def process_shift(args, finetune):
     filebase = args.filebase
     columns = get_columns(args, True)
     all_res = []
@@ -141,31 +141,32 @@ def process_fixed_seed_shift(args, finetune):
         avg_test_shift = np.average(test_shift_acc, axis=0)
         train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift = np.load(train_loss_orig), np.load(test_loss_orig), np.load(train_loss_shift), np.load(test_loss_shift)
         
-        
-        filename = get_filename(filebase, run_id, args.epochs, shift = 'orig')
-        filename_shift = get_filename(filebase, run_id, args.finetune_epochs, shift = 'shift')
-        filename_orig_full = get_filename(filebase, run_id, args.epochs, shift = 'orig', full=1)
-        filename_shift_full = get_filename(filebase, run_id,  args.finetune_epochs, shift = 'shift', full=1)
+        for epoch in args.epochs:
+            for ft_epoch in args.finetune_epochs:
+                filename = get_filename(filebase, run_id, epoch, shift = 'orig')
+                filename_shift = get_filename(filebase, run_id, ft_epoch, shift = 'shift')
+                filename_orig_full = get_filename(filebase, run_id, epoch, shift = 'orig', full=1)
+                filename_shift_full = get_filename(filebase, run_id,  ft_epoch, shift = 'shift', full=1)
 
-    
-        new_res = [dataset, 0, args.epochs, threshold, adversarial, 1, n, activation, lr, lr_decay, weight_decay,
-                    nodes_per_layer, num_layers, epsilon, beta, params[16]] # 16 columns
+            
+                new_res = [dataset, 0, epoch, ft_epoch, threshold, adversarial, 1, n, activation, lr, lr_decay, weight_decay,
+                            nodes_per_layer, num_layers, epsilon, beta, params[16]] # 16 columns
 
-        # add accuracy metrics
-        targets_avg = [avg_train_shift, avg_test_shift]
-        targets = [train_shift_acc, test_shift_acc]
-        for avg, tar in zip(targets_avg, targets): # 24 columns
-            new_res.append(avg[0,0])
-            for perc in [10,25,50,75,90]:
-                new_res.append(np.percentile(np.array(tar.T[0])[0],perc))
-            new_res.append(np.std(np.array(tar.T[0])))
-        targets = [train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift]
-        for tar in targets: # 4 columns
-            new_res.append(tar[0])
+                # add accuracy metrics
+                targets_avg = [avg_train_shift, avg_test_shift]
+                targets = [train_shift_acc, test_shift_acc]
+                for avg, tar in zip(targets_avg, targets): # 24 columns
+                    new_res.append(avg[0,0])
+                    for perc in [10,25,50,75,90]:
+                        new_res.append(np.percentile(np.array(tar.T[0])[0],perc))
+                    new_res.append(np.std(np.array(tar.T[0])))
+                targets = [train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift]
+                for tar in targets: # 4 columns
+                    new_res.append(tar[0])
 
-        new_res.extend(add_tops_shift(filename, filename_shift_full, n))
-        new_res.extend(add_tops_shift(filename_orig_full, filename_shift, n))
-        all_res.append(new_res)
+                new_res.extend(add_tops_shift(filename, filename_shift_full, n))
+                new_res.extend(add_tops_shift(filename_orig_full, filename_shift, n))
+                all_res.append(new_res)
     df = pd.DataFrame(all_res,columns=columns)
     df.to_csv(args.outputfile + ".csv", index=False)
 
@@ -180,23 +181,24 @@ def collect_params(filepath, run_id):
     return params
 
 def main(args):
-    # check fixed seed and datasetshift - need to be consistent right now across all runs
+    # Note: fixed seed is always true (doesn't make sense to start from different seed when we're starting with the same pre-trained model)
+
     params = collect_params(args.filebase, args.run_id[0])
     if params[16] == 'True':
         finetune = True
     else:
         finetune = False
-    process_fixed_seed_shift(args, finetune)
+    process_shift(args, finetune)
 
 
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('filebase', type=str)
-    parser.add_argument('outputfile', type=str) # don't include .csv extension
+    parser.add_argument('filebase', type=str, help='directory where .npy file outputs are stored')
+    parser.add_argument('outputfile', type=str, help='name of output csv file -- do not include .csv extension') # don't include .csv extension
     parser.add_argument('--run_id', type=str, nargs='+')
-    parser.add_argument('--epochs',type=int)
-    parser.add_argument('--finetune_epochs')
+    parser.add_argument('--epochs',type=int, nargs='+')
+    parser.add_argument('--finetune_epochs',type=int, nargs='+')
 
 
     args = parser.parse_args()

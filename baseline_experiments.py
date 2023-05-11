@@ -5,6 +5,7 @@ from torch import nn
 
 import data_utils
 import datasets
+import parser_utils
 import training
 
 # NEURAL ARCHITECTURE - see neural_net.py
@@ -119,53 +120,12 @@ def main(args):
     return 1
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('dataset', type=str)
-    parser.add_argument('file_base', type=str, help='file path of dataset through _train or _test')
-    parser.add_argument('run_id', type=str)
-    parser.add_argument('--base_repeats', type=int, default=10) # how many base models do we need to compare with (and average over?)
-    parser.add_argument('--variations', type=int, default=10) # how many models to compare, total?
-    parser.add_argument('--dataset_shift', type=bool, default=False)
-    parser.add_argument('--adversarial', type=bool, default=False)
-    parser.add_argument('--output_dir', type=str, default='.')
-    parser.add_argument('--label_col', default='label', type=str)
-
-    parser.add_argument('--linear', type=bool, default=False)
-
-    parser.add_argument('--lr', type=float, default=0.2)
-    parser.add_argument('--lr_decay', type=float, default=0.8)
-    parser.add_argument('--weight_decay', type=float, default=0.0)
-    parser.add_argument('--epochs', type=int, default=[20], nargs='+')
-    parser.add_argument('--lime_epochs', type=int, default=None, nargs='+')
-    parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--activation', type=str, default='relu')
-    parser.add_argument('--nodes_per_layer', type=int, default=50)
-    parser.add_argument('--num_layers', type=int, default=5)
-    parser.add_argument('--optimizer', type=str, default=None)
-    parser.add_argument('--fixed_seed', type=bool, default=False) # if true, use seed 0 for all random states
-    parser.add_argument('--finetune', type=bool, default = False)
-
-    parser.add_argument('--threshold', type=float, default = 0.0, help='Standard deviation of noise (for gaussian noise on real-valued data) or probability that a feature si flipped (binary data)')
-    parser.add_argument('--epsilon', type=float, default=0.5) # epsilon for finding adv. examples
-    parser.add_argument('--dropout', type=float, default=0.0) # dropout rate
-    parser.add_argument('--beta', type=float, default=5) # beta for softplus
+    parser = parser_utils.create_parser()
+    parser = parser_utils.add_retraining_args(parser)
 
     args = parser.parse_args()
+    args = parser_utils.process_args(args)
 
-    args.loss = nn.CrossEntropyLoss()         
-
-    if args.activation is not None:
-        if args.activation == 'leak':
-            args.activation = nn.LeakyReLU()
-        elif args.activation == 'soft':
-            args.activation = nn.Softplus(beta=args.beta)
-        else:
-            args.activation = nn.ReLU()
-    else:
-        args.activation = nn.ReLU()
-
-    if args.lime_epochs is None:
-        args.lime_epochs = args.epochs
     args.orig_dataset_shift = False
     args.shifted_dataset_shift = False
     # if we are testing dataset shift (rather than random perturbation), 
