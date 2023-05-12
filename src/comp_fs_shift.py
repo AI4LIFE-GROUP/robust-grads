@@ -4,6 +4,8 @@ import os
  
 import argparse
 
+import utils.metrics as metrics
+
 def get_filename(filebase, run_id, epoch, shift = None, full = False):
     filename = filebase + "/results_" 
     if 'adv' in run_id:
@@ -38,31 +40,6 @@ def get_grads_base(filename, n, base_index, version = 'gradients', fixed_seed = 
     grads_base = np.load(filename + version + idx + ".npy")
     return grads_base
 
-def gradnorm_raw(x, y, l):
-    norms = np.linalg.norm(x-y, ord=l, axis=1)[:, np.newaxis]
-    return sum(norms)/len(norms)
-
-def gradnorm_norm(x, y, l):
-    scalar = np.linalg.norm(x, axis=1)[:, np.newaxis]
-    norms = np.linalg.norm(x-y, ord=l, axis=1)[:, np.newaxis]
-    norms = np.divide(norms, scalar, out=np.zeros_like(norms), where=scalar!=0)
-    return sum(norms)/len(norms)
-
-def gradient_angle(x, y, l):
-    # convert x to be unit vectors along axis=1 but avoid dividing by 0
-    x = np.divide(x, np.linalg.norm(x, axis=1, ord=l)[:, np.newaxis], out=np.zeros_like(x), where=np.linalg.norm(x, axis=1, ord=l)[:, np.newaxis]!=0)
-    y = np.divide(y, np.linalg.norm(y, axis=1, ord=l)[:, np.newaxis], out=np.zeros_like(y), where=np.linalg.norm(y, axis=1, ord=l)[:, np.newaxis]!=0)
-    angles = np.zeros((y.shape[0]))
-    for i_idx in range(y.shape[0]):
-        dot = np.dot(x[i_idx], y[i_idx])
-        if dot >= 1:
-            angles[i_idx] = 0 # undefined for greater than 1
-        elif dot <= -1:
-            angles[i_idx] = np.pi
-        else:
-            angles[i_idx] = np.arccos(dot)
-    return sum(angles)/len(angles)
-
 
 
 def add_tops_shift(filename_orig, filename_shift, n):
@@ -76,9 +53,9 @@ def add_tops_shift(filename_orig, filename_shift, n):
             g1 = np.load(filename_orig + name + str(idx) + ".npy")
             g2 = np.load(filename_shift + name + str(idx) + ".npy")
 
-            grads_raw.append(gradnorm_raw(g1, g2, 2))
-            grads_normed.append(gradnorm_norm(g1, g2, 2))
-            grads_angle.append(gradient_angle(g1, g2, 2))
+            grads_raw.append(metrics.gradnorm_raw(g1, g2, 2))
+            grads_normed.append(metrics.gradnorm_norm(g1, g2, 2))
+            grads_angle.append(metrics.gradient_angle(g1, g2, 2))
         for res in [grads_raw, grads_normed, grads_angle]: 
             new_res.append(np.mean(res))
             for perc in [5, 10, 25, 50, 75, 90, 95]:
@@ -89,7 +66,7 @@ def add_tops_shift(filename_orig, filename_shift, n):
     return full_res
 
 
-def get_columns(args, dataset_shift):
+def get_columns():
     columns = ['dataset', 'iteration', 'epochs', 'finetune_epochs', 'threshold', 'adversarial', 'fixed_seed', 'variations', 'activation',
                 'lr', 'lr_decay', 'weight_decay', 'nodes_per_layer', 'num_layers', 'epsilon', 'beta', 'finetune']
 
@@ -114,11 +91,20 @@ def get_columns(args, dataset_shift):
     return columns
 
 
-        
+def collect_params(filepath, run_id):
+    try:
+        params = np.load(filepath + "/params_" + run_id + ".npy")
+    except:
+        try:
+            params = np.load(filepath + "/params_" + run_id + "_orig.npy")
+        except:
+            params = np.load(filepath + "/params_" + run_id + "_shifted.npy")
+    return params
 
-def process_shift(args, finetune):
+def main(args):
+    # Note: fixed seed is always true (doesn't make sense to start from different seed when we're starting with the same pre-trained model)
     filebase = args.filebase
-    columns = get_columns(args, True)
+    columns = get_columns()
     all_res = []
     for run_id in args.run_id:
         params = collect_params(args.filebase, run_id)
@@ -169,26 +155,6 @@ def process_shift(args, finetune):
                 all_res.append(new_res)
     df = pd.DataFrame(all_res,columns=columns)
     df.to_csv(args.outputfile + ".csv", index=False)
-
-def collect_params(filepath, run_id):
-    try:
-        params = np.load(filepath + "/params_" + run_id + ".npy")
-    except:
-        try:
-            params = np.load(filepath + "/params_" + run_id + "_orig.npy")
-        except:
-            params = np.load(filepath + "/params_" + run_id + "_shifted.npy")
-    return params
-
-def main(args):
-    # Note: fixed seed is always true (doesn't make sense to start from different seed when we're starting with the same pre-trained model)
-
-    params = collect_params(args.filebase, args.run_id[0])
-    if params[16] == 'True':
-        finetune = True
-    else:
-        finetune = False
-    process_shift(args, finetune)
 
 
 if __name__ == "__main__":

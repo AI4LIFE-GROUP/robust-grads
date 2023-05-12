@@ -1,69 +1,27 @@
-import argparse
 import numpy as np
-import pandas as pd
-from torch import nn
 
-import utils.data_utils as data_utils
 import utils.datasets as datasets
 import utils.parser_utils as parser_utils
 import training
-
-# NEURAL ARCHITECTURE - see neural_net.py
+import utils.exp_utils as exp_utils
 
 def main(args):
-    if args.dataset_shift:
-        if args.fixed_seed:
-            random_states = [x for x in range(args.variations)]
-        else:
-            if 'orig' in args.dataset:
-                random_states = [x for x in range(args.variations)]
-            else:
-                random_states = [x + args.variations for x in range(args.variations)]
-    else:
-        if args.fixed_seed:
-            # we need args.variations # of base models and then args.base_repeats # of comparison models for each
-            random_states = [x for x in range((args.variations + 1)*args.base_repeats)]     
-        if args.fixed_seed == False:
-            # we need args.variations # of base models and then args.base_repeats # of comparison models total
-            random_states = [x for x in range(args.variations + args.base_repeats)]        
+    dataset, run_id, output_dir = args.dataset, args.run_id, args.output_dir
+    dataset_shift, fixed_seed, finetune = args.dataset_shift, args.fixed_seed, args.finetune
+    base_repeats, variations = args.base_repeats, args.variations
+    threshold = args.threshold
+
+    random_states = exp_utils.get_random_states(dataset, dataset_shift, fixed_seed, variations, base_repeats)
 
     test_accuracy, train_accuracy, secondary_accuracy = [], [], []
 
-    finetune = args.finetune
     for r in random_states:
-        if (not args.dataset_shift) and (args.fixed_seed == False) and (r < args.base_repeats):
-            baseline_model = True           
-            add_noise = False
-        elif (r % (args.variations + 1) == 0):
-            baseline_model = True
-            add_noise = False
-        else: 
-            baseline_model = False
-            if args.dataset_shift:
-                add_noise = False
-            else:
-                add_noise = True
-        if (args.fixed_seed) and not args.dataset_shift:
-            seed = (r) // (args.variations + 1)
-        else:
-            seed = r
+        add_noise, baseline_model, seed = exp_utils.find_seed(r, dataset_shift, fixed_seed, base_repeats, variations)
+        train, test = datasets.load_data(args.file_base, dataset, r, threshold, add_noise=add_noise, label_col=args.label_col)
 
-        if 'whobin' in args.dataset:
-            scaler = data_utils.get_scaler(pd.read_csv(args.file_base + '_train.csv').drop(
-                columns=[args.label_col]), args.threshold, random_state=r, add_noise=add_noise)
-            scaler_labels = None
-        else:  # if data is already scaled in a preprocessing step, skip scaling step 
-            scaler, scaler_labels = None, None
-        train, test = datasets.load_data(args.file_base, args.dataset, scaler, scaler_labels, r, args.threshold, add_noise=add_noise)
         secondary_dataset = None
-        if args.dataset_shift and 'orig' in args.dataset:
-            sec_name = args.dataset.replace('orig', 'shift')
-            file_base = args.file_base.replace('orig', 'shift')
-            _, secondary_dataset = datasets.load_data(file_base, sec_name, scaler, scaler_labels, r, args.threshold, add_noise=add_noise)
-        elif args.dataset_shift:
-            sec_name = args.dataset.replace('shift', 'orig')
-            file_base = args.file_base.replace('shift', 'orig')
-            _, secondary_dataset = datasets.load_data(file_base, sec_name, scaler, scaler_labels, r, args.threshold, add_noise=add_noise)
+        if dataset_shift:
+            secondary_dataset = datasets.load_secondary_dataset(dataset, args.file_base, r, threshold, add_noise=add_noise, label_col=args.label_col)
 
         num_feat = train.num_features()
         num_classes = train.num_classes()
@@ -73,20 +31,18 @@ def main(args):
                         num_layers=args.num_layers, optimizer=args.optimizer, seed=seed, epsilon = args.epsilon, dropout= args.dropout,
                         weight_decay = args.weight_decay)
         
-        ### TODO insert other model architectures here
+        ### TODO move linear to its own file?
         if args.linear:
             training.train_linear_models(args, train, test, r)
         elif args.adversarial:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, secondary_dataset, (finetune and (not baseline_model)), (finetune and baseline_model))
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, (finetune and (not baseline_model)), (finetune and baseline_model))
         else:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, secondary_dataset, (finetune and (not baseline_model)), (finetune and baseline_model))
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, (finetune and (not baseline_model)), (finetune and baseline_model))
         test_accuracy.append(test_acc)
         train_accuracy.append(train_acc)
         if sec_acc is not None:
             secondary_accuracy.append(sec_acc)
 
-    print(len(train_accuracy))
-    print(train_accuracy[0].shape)
     # print accuracy info
     trainacc = [round(train_accuracy[i][-1]*100, 2) for i in range(len(train_accuracy))]
     testacc = [round(test_accuracy[i][-1]*100, 2) for i in range(len(test_accuracy))]
@@ -95,36 +51,33 @@ def main(args):
     print("Test acc: ", testacc)
     print("avg: ", sum(testacc)/len(testacc), " min: ", min(testacc))
 
-
     # save accuracy/loss
-    np.save(args.output_dir + "/accuracy_train_" + args.run_id + ".npy", train_accuracy)
-    np.save(args.output_dir + "/accuracy_test_" + args.run_id + ".npy", test_accuracy)
-    np.save(args.output_dir + "/loss_train_" + args.run_id + ".npy", train_loss)
-    np.save(args.output_dir + "/loss_test_" + args.run_id + ".npy", test_loss)
+    np.save(output_dir + "/accuracy_train_" + run_id + ".npy", train_accuracy)
+    np.save(output_dir + "/accuracy_test_" + run_id + ".npy", test_accuracy)
+    np.save(output_dir + "/loss_train_" + run_id + ".npy", train_loss)
+    np.save(output_dir + "/loss_test_" + run_id + ".npy", test_loss)
 
     # save params
-    if type(args.activation) == type(nn.ReLU()):
-        act = "relu"
-    elif type(args.activation) == type(nn.Softplus(beta=5)):
-        act = "soft"
-    params = [args.dataset, args.threshold, args.adversarial, args.dataset_shift, args.fixed_seed, 
-                args.base_repeats, args.variations, act, args.lr, args.lr_decay, args.weight_decay, 
-                max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, args.finetune]
-    np.save(args.output_dir + "/params_" + args.run_id + ".npy", params)
-    if args.dataset_shift:
-        if 'orig' in args.dataset:
-            np.save(args.output_dir + "/accuracy_test_orig_" + args.run_id + ".npy", secondary_accuracy)
+    act = exp_utils.get_activation(args.activation)
+
+    params = [dataset, threshold, args.adversarial, dataset_shift, fixed_seed, 
+                base_repeats, variations, act, args.lr, args.lr_decay, args.weight_decay, 
+                max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, finetune]
+    np.save(output_dir + "/params_" + run_id + ".npy", params)
+    if dataset_shift:
+        if 'orig' in dataset:
+            np.save(output_dir + "/accuracy_test_orig_" + run_id + ".npy", secondary_accuracy)
         else:
-            np.save(args.output_dir + "/accuracy_test_shift_" + args.run_id + ".npy", secondary_accuracy)
+            np.save(output_dir + "/accuracy_test_shift_" + run_id + ".npy", secondary_accuracy)
 
     return 1
 
 if __name__ == "__main__":
-    parser = parser_utils.create_parser()
+    parser = parser_utils.create_nn_parser()
     parser = parser_utils.add_retraining_args(parser)
 
     args = parser.parse_args()
-    args = parser_utils.process_args(args)
+    args = parser_utils.process_args_nn(args)
 
     args.orig_dataset_shift = False
     args.shifted_dataset_shift = False

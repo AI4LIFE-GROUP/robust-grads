@@ -1,4 +1,3 @@
-import argparse
 import numpy as np
 import pandas as pd
 from torch import nn
@@ -23,24 +22,18 @@ def main(args):
     test_acc_shift, train_acc_shift, sec_acc_shift = [], [], []
     all_train_loss, all_test_loss, all_train_shift_loss, all_test_shift_loss = [], [], [], []
 
-
     finetune = args.finetune
     orig_run_id = args.run_id
 
     for r in random_states:
         args.run_id = orig_run_id
-
         seed = r
-        print("Working with r=",str(r))
 
-        scaler = data_utils.get_scaler(pd.read_csv(args.file_base + '_train.csv').drop(
-                columns=[args.label_col]), args.threshold, random_state=r, add_noise=False)
-        scaler_labels = None
-        train, test = datasets.load_data(args.file_base, args.dataset, scaler, scaler_labels, r, args.threshold, add_noise=False)
+        train, test = datasets.load_data(args.file_base, args.dataset,  r, args.threshold, add_noise=False, label_col = args.label_col)
 
         sec_name = args.dataset.replace('orig', 'shift')
         file_base = args.file_base.replace('orig', 'shift')
-        shifted_train, shifted_test = datasets.load_data(file_base, sec_name, scaler, scaler_labels, r, args.threshold, add_noise=False)
+        shifted_train, shifted_test = datasets.load_data(file_base, sec_name, r, args.threshold, add_noise=False, label_col = args.label_col)
 
         num_feat = train.num_features()
         num_classes = train.num_classes()
@@ -106,7 +99,7 @@ def main(args):
     return 1
 
 if __name__ == "__main__":
-    parser = parser_utils.create_parser()
+    parser = parser_utils.create_nn_parser()
 
     args = parser.parse_args()
 
@@ -114,7 +107,7 @@ if __name__ == "__main__":
     args.dataset_shift = True
     args.threshold = 0 # do not add random noise to data
 
-    args = parser_utils.process_args(args)
+    args = parser_utils.process_args_nn(args)
     
     args.shifted_dataset_shift = False
     args.orig_dataset_shift = True

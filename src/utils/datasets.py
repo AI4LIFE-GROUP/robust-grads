@@ -123,19 +123,24 @@ def load_mnist_data(random_state, threshold, add_noise = False):
         test.data = data_utils.perturb_X(test.data, 0, threshold, 0, 255, add_noise = add_noise)
     return train, test
 
-def load_data(file_base, dataset, scaler, scaler_labels, random_state, threshold, add_noise = False):
+def load_data(file_base, dataset, random_state, threshold, add_noise = False, label_col="label"):
+    '''
+    TODO
+    remove unused datasets?
+    '''
+    scaler, scaler_labels = None, None
     if 'whobin' in dataset:
-        train = BinaryDataset(file_base + '_train.csv', threshold, transform=scaler, random_state=random_state, add_noise=add_noise)
-        test = BinaryDataset(file_base + '_test.csv', threshold, transform=scaler, random_state=-1, add_noise=add_noise)
+        scaler = data_utils.get_scaler(pd.read_csv(file_base + '_train.csv').drop(
+                columns=[label_col]), threshold, random_state=random_state, add_noise=add_noise)
+        scaler_labels = None
+        train = BinaryDataset(file_base + '_train.csv', threshold, transform=scaler, random_state=random_state, add_noise=add_noise, label_col= label_col)
+        test = BinaryDataset(file_base + '_test.csv', threshold, transform=scaler, random_state=-1, add_noise=add_noise, label_col = label_col)
     elif dataset in ['compas', 'income', 'german', 'german_cor', 'student','heloc', 'adult']:
-        train = BinaryDataset(file_base + '_train.csv', threshold, transform=scaler, random_state=random_state, feature_type='discrete', add_noise=add_noise)
-        test = BinaryDataset(file_base + '_test.csv', threshold, transform=scaler, random_state=-1, feature_type='discrete', add_noise=add_noise)
-    elif dataset in ['jordan', 'kuwait']:
-        train = BinaryDataset(file_base + '_train.csv', threshold, transform=scaler, random_state=random_state, feature_type='mixed', add_noise=add_noise)
-        test = BinaryDataset(file_base + '_test.csv', threshold, transform=scaler, random_state=-1, feature_type='mixed', add_noise=add_noise)
+        train = BinaryDataset(file_base + '_train.csv', threshold, transform=scaler, random_state=random_state, feature_type='discrete', add_noise=add_noise, label_col= label_col)
+        test = BinaryDataset(file_base + '_test.csv', threshold, transform=scaler, random_state=-1, feature_type='discrete', add_noise=add_noise, label_col = label_col)
     elif dataset == 'who':
-        train = WhoDataset(file_base + '_train.csv', threshold, transform=scaler, target_transform=scaler_labels, random_state=random_state, add_noise=add_noise)
-        test = WhoDataset(file_base + '_test.csv', threshold, transform=scaler,  target_transform=scaler_labels, random_state=-1, add_noise=add_noise)
+        train = WhoDataset(file_base + '_train.csv', threshold, transform=scaler, target_transform=scaler_labels, random_state=random_state, add_noise=add_noise, label_col= label_col)
+        test = WhoDataset(file_base + '_test.csv', threshold, transform=scaler,  target_transform=scaler_labels, random_state=-1, add_noise=add_noise, label_col = label_col)
     else:
         train, test = load_mnist_data(random_state, threshold, add_noise=add_noise)
     return train, test
@@ -163,3 +168,14 @@ def load_data_simple(file_base, dataset, scaler, random_state, threshold, label_
         X_train = scaler.fit_transform(X_train)
         X_test = scaler.fit_transform(X_test)
     return X_train, np.array(y_train), X_test, np.array(y_test)
+
+def load_secondary_dataset(dataset, file_base, r, threshold, add_noise=False, label_col="label"):
+    if 'orig' in dataset:
+        sec_name = dataset.replace('orig', 'shift')
+        file_base = file_base.replace('orig', 'shift')
+        _, secondary_dataset = load_data(file_base, sec_name, r, threshold, add_noise=add_noise)
+    else:
+        sec_name = dataset.replace('shift', 'orig')
+        file_base = file_base.replace('shift', 'orig')
+        _, secondary_dataset = load_data(file_base, sec_name, r, threshold, add_noise=add_noise)
+    return secondary_dataset

@@ -418,6 +418,6 @@ def dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondar
         np.save("theta_diff_" + run_id + "_" + str(random_state) + ".npy",diff_squared)
     else:
         # save model so we can compute theta diff later
-        torch.save(model.state_dict(), output_dir + 'model_' + run_id + str(random_state) + '.pt')
+        torch.save(model.state_dict(), output_dir + '/model_' + run_id + str(random_state) + '.pt')
         
     return model, all_acc_test, all_acc_train, all_sec_acc, all_loss_test, all_loss_train

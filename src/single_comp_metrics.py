@@ -3,11 +3,7 @@ import numpy as np
 import os
  
 import argparse
-
-
-def get_top_k(k, X):
-    X = np.abs(X)
-    return np.argpartition(X, -k, axis=1)[:, -k:]
+import utils.metrics as metrics
 
 def get_filename(filebase, run_id, epoch, shift = None, full = False):
     filename = filebase + "/results_" 
@@ -62,96 +58,15 @@ def get_grads_base(filename, n, base_index, version = 'gradients', fixed_seed = 
     grads_base = np.load(filename + version + idx + ".npy")
     tops = []
     for i in range(5):
-        tops.append(get_top_k(i+1, grads_base))
+        tops.append(metrics.get_top_k(i+1, grads_base))
     return grads_base, tops
 
-def gradnorm_raw(x, y, l):
-    norms = np.linalg.norm(x-y, ord=l, axis=1)[:, np.newaxis]
-    return sum(norms)/len(norms)
 
-def gradnorm_norm(x, y, l):
-    scalar = np.linalg.norm(x, axis=1)[:, np.newaxis]
-    norms = np.linalg.norm(x-y, ord=l, axis=1)[:, np.newaxis]
-    norms = np.divide(norms, scalar, out=np.zeros_like(norms), where=scalar!=0)
-    return sum(norms)/len(norms)
 
-def gradient_angle(x, y, l):
-    # convert x to be unit vectors along axis=1 but avoid dividing by 0
-    x = np.divide(x, np.linalg.norm(x, axis=1, ord=l)[:, np.newaxis], out=np.zeros_like(x), where=np.linalg.norm(x, axis=1, ord=l)[:, np.newaxis]!=0)
-    y = np.divide(y, np.linalg.norm(y, axis=1, ord=l)[:, np.newaxis], out=np.zeros_like(y), where=np.linalg.norm(y, axis=1, ord=l)[:, np.newaxis]!=0)
-    angles = np.zeros((y.shape[0]))
-    for i_idx in range(y.shape[0]):
-        dot = np.dot(x[i_idx], y[i_idx])
-        if dot >= 1:
-            angles[i_idx] = 0 # undefined for greater than 1
-        elif dot <= -1:
-            angles[i_idx] = np.pi
-        else:
-            angles[i_idx] = np.arccos(dot)
-    return sum(angles)/len(angles)
 
-def top_k_overall(k, x, y):
-    # x and y are nxk arrays
-    # we want to return a n-dimensional array where each entry is the consistency between x and y
-    res = np.zeros([x.shape[0],k])
-    for i in range(x.shape[0]):
-        for j in range(k):
-            if x[i,j] in y[i]:
-                res[i,j] = 1
-            else:
-                res[i,j] = 0
-    frac_right = np.sum(res, axis=1)/k
-    return sum(frac_right)/len(frac_right)
 
-def top_k_sa(k, x, y, signs_x, signs_y):
-    # X and Y are nxk arrays
-    # we want to return a n-dimensional array where n[i] is the frac. of x[i] and y[i] 
-    # that agree and have same sign
-    # step 1 just checks whether X's top-K features have the same sign in Y. If not, indices of x are set to 0
-    #     so that in top_k_overall they will not be counted
-    limited_sx = signs_x[np.arange(x.shape[0])[:,None], x]
-    limited_sy = signs_y[np.arange(x.shape[0])[:,None], x]
-    
-    x = np.where(limited_sx == limited_sy, x, -1)
-    return top_k_overall(k, x, y)
 
-def top_k_cdc(k, x, y, signs_x, signs_y):
-    ''' Returns CONSISTENT direction of contribution, i.e., 1 = total agreement '''
-    limited_sx = signs_x[np.arange(x.shape[0])[:,None], x]
-    limited_sy = signs_y[np.arange(x.shape[0])[:,None], x]
-    x = (limited_sx == limited_sy)#  + (-1) * (limited_sx != limited_sy)
-    limited_sx = signs_x[np.arange(y.shape[0])[:,None], y]
-    limited_sy = signs_y[np.arange(y.shape[0])[:,None], y]
-    y = (limited_sx == limited_sy)
-    scores = np.all(x == 1, axis=1) & np.all(y == 1, axis=1)
-    return sum(scores)/len(scores)
 
-def top_k_ssd(k, x, y, signs_x, signs_y):
-    ''' Returns Signed Set *Agreement* (i.e., 1 means perfect agreement)'''
-    # First, we need to satisfy CDC, so check that first: 
-    limited_sx = signs_x[np.arange(x.shape[0])[:,None], x]
-    limited_sy = signs_y[np.arange(x.shape[0])[:,None], x]
-    xeq = (limited_sx == limited_sy)#  + (-1) * (limited_sx != limited_sy)
-    limited_sx = signs_x[np.arange(y.shape[0])[:,None], y]
-    limited_sy = signs_y[np.arange(y.shape[0])[:,None], y]
-    yeq = (limited_sx == limited_sy)
-    cdc = np.logical_and(np.all(xeq == 1, axis=1), np.all(yeq == 1, axis=1))
-
-    # Next, we need to know whether X and Y have the same top-k features
-    res = np.zeros([x.shape[0],k])
-    for i in range(x.shape[0]):
-        for j in range(k):
-            if x[i,j] in y[i]:
-                res[i,j] = 1
-            else:
-                res[i,j] = 0
-    frac_right = np.sum(res, axis=1)/k
-    frac_right = np.where(frac_right == 1, 1, 0)
-
-    # now, frac_right is 1 if x and y have the same top-K features, and cdc is 1 if all of X's top-K features have the same sign in Y
-    # so, we need to return 1 if both are true and 0 otherwise
-    scores = np.logical_and(frac_right, cdc)
-    return sum(scores)/len(scores)
 
 def add_tops_shift(filename_orig, filename_shift, n, lime_epoch, fixed_seed):
     full_res = []
@@ -178,16 +93,16 @@ def add_tops_shift(filename_orig, filename_shift, n, lime_epoch, fixed_seed):
             s2 = np.sign(g2)
             tops1, tops2 = [], []
             for i in range(5):
-                tops1.append(get_top_k(i+1, g1))
-                tops2.append(get_top_k(i+1, g2))
+                tops1.append(metrics.get_top_k(i+1, g1))
+                tops2.append(metrics.get_top_k(i+1, g2))
             for i in range(5):
-                top_f[i].append(top_k_overall(i+1, tops1[i], tops2[i]))
-                top_sa[i].append(top_k_sa(i+1, tops1[i], tops2[i], s1, s2))
-                top_cdc[i].append(top_k_cdc(i+1, tops1[i], tops2[i], s1, s2))
-                top_ssd[i].append(top_k_ssd(i+1, tops1[i], tops2[i], s1, s2))
-            grads_raw.append(gradnorm_raw(g1, g2, 2))
-            grads_normed.append(gradnorm_norm(g1, g2, 2))
-            grads_angle.append(gradient_angle(g1, g2, 2))
+                top_f[i].append(metrics.top_k_overall(i+1, tops1[i], tops2[i]))
+                top_sa[i].append(metrics.top_k_sa(i+1, tops1[i], tops2[i], s1, s2))
+                top_cdc[i].append(metrics.top_k_cdc(i+1, tops1[i], tops2[i], s1, s2))
+                top_ssd[i].append(metrics.top_k_ssd(i+1, tops1[i], tops2[i], s1, s2))
+            grads_raw.append(metrics.gradnorm_raw(g1, g2, 2))
+            grads_normed.append(metrics.gradnorm_norm(g1, g2, 2))
+            grads_angle.append(metrics.gradient_angle(g1, g2, 2))
         for k in range(5):    
             for res in [top_f, top_sa, top_cdc, top_ssd]:
                 new_res.append(np.mean(res[k]))
@@ -223,13 +138,13 @@ def add_tops(filename, tops, grads_base, tops_sal, salience_base, tops_smooth, s
     full_res = []
     if lime_base is not None:
         metric_names = ['gradients', 'salience', 'smoothgrad', 'lime', 'shap']
-        metrics = [grads_base, salience_base, smooth_base, lime_base, shap_base]
+        metric_vals = [grads_base, salience_base, smooth_base, lime_base, shap_base]
         all_topk = [tops, tops_sal, tops_smooth, tops_lime, tops_shap]
     else:
         metric_names = ['gradients', 'salience', 'smoothgrad']
-        metrics = [grads_base, salience_base, smooth_base]
+        metric_vals = [grads_base, salience_base, smooth_base]
         all_topk = [tops, tops_sal, tops_smooth]
-    for name, met, top in zip(metric_names, metrics, all_topk):
+    for name, met, top in zip(metric_names, metric_vals, all_topk):
         new_res = []
         signs = np.sign(met)
 
@@ -248,16 +163,16 @@ def add_tops(filename, tops, grads_base, tops_sal, salience_base, tops_smooth, s
             s = np.sign(g)
             top_temps = []
             for i in range(5):
-                top_temps.append(get_top_k(i+1, g))
+                top_temps.append(metrics.get_top_k(i+1, g))
             for i in range(5):
-                top_f[i].append(top_k_overall(i+1, top[i], top_temps[i]))
-                top_sa[i].append(top_k_sa(i+1, top[i], top_temps[i], signs, s))
-                top_cdc[i].append(top_k_cdc(i+1, top[i], top_temps[i], signs, s))
-                top_ssd[i].append(top_k_ssd(i+1, top[i], top_temps[i], signs, s))
+                top_f[i].append(metrics.top_k_overall(i+1, top[i], top_temps[i]))
+                top_sa[i].append(metrics.top_k_sa(i+1, top[i], top_temps[i], signs, s))
+                top_cdc[i].append(metrics.top_k_cdc(i+1, top[i], top_temps[i], signs, s))
+                top_ssd[i].append(metrics.top_k_ssd(i+1, top[i], top_temps[i], signs, s))
 
-            grads_raw.append(gradnorm_raw(met, g, 2))
-            grads_normed.append(gradnorm_norm(met, g, 2))
-            grads_angle.append(gradient_angle(met, g, 2))
+            grads_raw.append(metrics.gradnorm_raw(met, g, 2))
+            grads_normed.append(metrics.gradnorm_norm(met, g, 2))
+            grads_angle.append(metrics.gradient_angle(met, g, 2))
         for k in range(5):
             for res in [top_f, top_sa, top_cdc, top_ssd]:
                 new_res.append(sum(res[k])/len(res[k]))
@@ -289,27 +204,22 @@ def add_tops(filename, tops, grads_base, tops_sal, salience_base, tops_smooth, s
 
     return full_res
 
-
-def get_columns(args, dataset_shift):
+def get_columns_common():
     columns = ['dataset', 'iteration', 'epochs', 'threshold', 'adversarial', 'fixed_seed', 'variations', 'activation',
                 'lr', 'lr_decay', 'weight_decay', 'nodes_per_layer', 'num_layers', 'epsilon', 'beta', 'finetune']
-    if dataset_shift:
-        options = ['train_shift', 'test_shift', 'train_orig', 'test_orig']
-    else:
-        options = ['train','test']
+    return columns
+
+def add_pcts_columns(options, suffix):
+    columns = []
     for t in options:
-        columns.append(t + "_acc")
+        columns.append(t + "_" + suffix)
         for perc in [5,10,25,50,75,90,95]:
-            columns.append(t + '_acc_p' + str(perc))
-        columns.append(t + '_acc_std')
-    if dataset_shift:
-        columns.extend(['train_loss_orig', 'test_loss_orig', 'train_loss_shift', 'test_loss_shift'])
-    else:
-        columns.extend(['train_loss', 'test_loss'])
-    if dataset_shift:
-        options = ['part_grad_', 'part_sal_', 'part_sg_', 'part_lime_', 'part_shap_', 'full_grad_',  'full_sal_',  'full_sg_',  'full_lime_',  'full_shap_']
-    else:
-        options = ['grad_', 'sal_', 'sg_', 'lime_', 'shap_']
+            columns.append(t + '_' + suffix + '_p' + str(perc))
+        columns.append(t + '_' + suffix + '_std')
+    return columns
+
+def add_pcts_columns_k(options):
+    columns = []
     for o in options:
         for k in range(5): 
             for res in ['top_a_', 'top_sa_', 'top_cdc_', 'top_ssd_']:
@@ -324,11 +234,29 @@ def get_columns(args, dataset_shift):
             columns.append(o + res + "_std")
     return columns
 
+def get_columns_dataset_shift():
+    columns = get_columns_common()
+    options = ['train_shift', 'test_shift', 'train_orig', 'test_orig']
+    columns.extend(add_pcts_columns(options, 'acc'))
+    columns.extend(['train_loss_orig', 'test_loss_orig', 'train_loss_shift', 'test_loss_shift'])
+    options = ['part_grad_', 'part_sal_', 'part_sg_', 'part_lime_', 'part_shap_', 'full_grad_',  'full_sal_',  'full_sg_',  'full_lime_',  'full_shap_']
+    columns.extend(add_pcts_columns_k(options))
+    return columns
+
+def get_columns():
+    columns = get_columns_common()
+    options = ['train','test']
+    columns.extend(add_pcts_columns(options, 'acc'))
+    columns.extend(['train_loss', 'test_loss'])
+    options = ['grad_', 'sal_', 'sg_', 'lime_', 'shap_']
+    columns.extend(add_pcts_columns_k(options))
+    return columns
+
 def process_random_seed(args):
     ''' Random seed, synthetic noise '''
     filebase = args.filebase
     dataset_shift = False
-    columns = get_columns(args, dataset_shift)
+    columns = get_columns()
     all_res = []
     for run_id in args.run_id:
         params = collect_params(args.filebase, run_id)
@@ -389,7 +317,7 @@ def process_random_seed(args):
 
 def process_fixed_seed(args, finetune):
     filebase = args.filebase
-    columns = get_columns(args, False)
+    columns = get_columns()
     all_res = []
     for run_id in args.run_id:
         params = collect_params(args.filebase, run_id)
@@ -454,7 +382,7 @@ def process_fixed_seed(args, finetune):
 
 def process_shift(args, finetune):
     filebase = args.filebase
-    columns = get_columns(args, True)
+    columns = get_columns_dataset_shift()
     all_res = []
     for run_id in args.run_id:
         params = collect_params(args.filebase, run_id)
