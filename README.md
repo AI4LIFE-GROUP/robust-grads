@@ -26,9 +26,9 @@ The code assumes that there will be two data files, named `filename_orig_train.c
 #### Retraining models
 Use this section as a guide if you want to compare models that were retrained from scratch.
 
-Start with `baseline_experiments.py` to generate the models, predictions, and test-set gradients. This file can be run as follows:
+Start with `retrain_experiments.py` to generate the models, predictions, and test-set gradients. This file can be run as follows:
 
-`python3 baseline_experiments.py <dataset> <file_base> <run_id> --dataset_shift=1`
+`python3 retrain_experiments.py <dataset> <file_base> <run_id> --dataset_shift=1`
 
 Dataset is the name of the dataset (e.g., whobin, adult, or heloc). Filebase is the filename up through `_train.csv`. run_id is any unique string corresponding to this set of experiments.
 
@@ -43,7 +43,7 @@ These other parameters can be changed from the defaults, if desired:
 *Training parameters*
 * `--lr` default 0.2. Learning rate
 * `--lr_decay` default 0.8. Learning rate decay
-* `--epochs` default 20
+* `--epochs` list of epochs (in ascending order) at which to calculate model explanations. the final (maximum) value is the total number of training epochs. Default [20]. 
 * `--batch_size` default 128
 * `--weight_decay` default 0
 * `--dropout` default 0
@@ -60,7 +60,7 @@ These other parameters can be changed from the defaults, if desired:
 * `--epsilon` (default 0.5, not used). Epsilon for constructing adversarial examples
 * `--linear` default false. If true, train a linear model instead of a neural network
 
-A number of files will be saved after running `baseline_experiments.py`: model parameters (`.pt` files), accuracy and loss (`.npy` files), and gradients (`.npy` files) for various attribution techniques. 
+A number of files will be saved after running `retrain_experiments.py`: model parameters (`.pt` files), accuracy and loss (`.npy` files), and gradients (`.npy` files) for various attribution techniques. 
 Several columns compare different data (original vs shifted), as follows:
 * files with `shiftcompare` in their titles compare the original and updated models directly
 * * files with `shiftcompare` and `full` in the title compare the original and shifted model as evaluated on the updated test dataset
@@ -73,7 +73,7 @@ To post-process these files into useful data, run `single_comp_metrics.py`, as f
 
 `python3 single_comp_metrics.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn> --epochs <e1> <e2>`
 
-files_location is where all of the `.npy` files live, i.e., the `output_dir` parameter from `baseline_experiments.py` (default `.`). output_file is the name of the csv file in which to store the results. `--run_id` takes a list of `run_id`'s from potentially multiple runs of `baseline_experiments.py` with different settings (however, all trials must have same `dataset_shift` value and `fixed_seed` value). Epochs is a list of epochs at which data was recorded (ascending order)
+files_location is where all of the `.npy` files live, i.e., the `output_dir` parameter from `retrain_experiments.py` (default `.`). output_file is the name of the csv file in which to store the results. `--run_id` takes a list of `run_id`'s from potentially multiple runs of `retrain_experiments.py` with different settings (however, all trials must have same `dataset_shift` value and `fixed_seed` value). Epochs is a list of epochs at which data was recorded (ascending order)
 
 `single_comp_metrics.py` will save a CSV file containing aggregate information about explanation robustness. 
 
@@ -82,7 +82,7 @@ Use `dataset_shift_exp.py` to run fine-tuning experiments on real-world data shi
 
 `python3 dataset_shift_exp.py <dataset> <file_base> <run_id>`
 
-The same command-line parameters as for `baseline_experiments.py` can be used, and have the same defaults, except for `--epochs` whose default is 1000. There is one additional command-line parameter, `--finetune_epochs` (default 250), which is the number of additional epochs for fine-tuning.
+The same command-line parameters as for `retrain_experiments.py` can be used, and have the same defaults, except for `--epochs` whose default is 1000. There is one additional command-line parameter, `--finetune_epochs` (default 250), which is the number of additional epochs for fine-tuning.
 
 To post-process the raw output, run `comp_fs_shift.py`, e.g.,
 
@@ -90,7 +90,7 @@ To post-process the raw output, run `comp_fs_shift.py`, e.g.,
 
 ### Synthetic dataset shift (Gaussian noise)
 #### Retraining models
-To compare models that are retrained from scratch, follow the same results as for real-world dataset shift retrained models (i.e., run `baseline_experiments.py` as described above, but omit the `dataset_shift` command-line parameter.)
+To compare models that are retrained from scratch, follow the same results as for real-world dataset shift retrained models (i.e., run `retrain_experiments.py` as described above, but omit the `dataset_shift` command-line parameter.)
 
 These additional command-line parameters will be useful.
 * `--threshold` default 0. Standard deviation of gaussian noise to add (for continuous features), or probability of modifying each feature (for binary features)

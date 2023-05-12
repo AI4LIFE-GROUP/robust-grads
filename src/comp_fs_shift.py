@@ -8,30 +8,22 @@ import utils.metrics as metrics
 
 def get_filename(filebase, run_id, epoch, shift = None, full = False):
     filename = filebase + "/results_" 
-    if 'adv' in run_id:
-        filename += 'orig_'
-    if shift is not None:
-        if shift == 'shift':
-            filename = filename + run_id + "_shifted_e" + str(epoch) + "_"
-        elif shift == 'orig':
-            filename = filename + run_id + "_e" + str(epoch) + "_"
-    else:
-        filename = filename + run_id + "_e" + str(epoch) + "_"
+    filename = filename + run_id + "_e" + str(epoch) + "_"
     if full:
         filename = filename + "full_"
     return filename
 
 def get_filename_acc_shift(filebase, run_id):
-    train_shift = filebase + "/" + 'accuracy_train_' + run_id + '_shifted.npy'
-    test_shift = filebase + "/" + 'accuracy_test_' + run_id + '_shifted.npy'
+    train_shift = filebase + "/" + 'accuracy_train_base_' + run_id + '.npy'
+    test_shift = filebase + "/" + 'accuracy_test_base_' + run_id + '.npy'
     return train_shift, test_shift
 
 def get_filename_loss_shift(filebase, run_id):
     ''' on orig model, just get loss on orig datasets'''
-    train_shift = filebase + "/" + 'loss_train_shifted_' + run_id + '_shifted.npy'
-    train_orig = filebase + "/" + 'loss_train_' + run_id + '_shifted.npy'
-    test_shift = filebase + "/" + 'loss_test_shifted_' + run_id + '_shifted.npy'
-    test_orig_full = filebase + "/" + 'loss_test_' + run_id + '_shifted.npy'
+    train_shift = filebase + "/" + 'loss_train_ft_' + run_id + '.npy'
+    train_orig = filebase + "/" + 'loss_train_base_' + run_id + '.npy'
+    test_shift = filebase + "/" + 'loss_test_ft_' + run_id + '.npy'
+    test_orig_full = filebase + "/" + 'loss_test_ft_' + run_id + '.npy'
     return train_shift, train_orig, test_shift, test_orig_full
 
 def get_grads_base(filename, n, base_index, version = 'gradients', fixed_seed = True):
@@ -117,6 +109,8 @@ def main(args):
 
         train_shift, test_shift = get_filename_acc_shift(filebase, run_id) 
         train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift = get_filename_loss_shift(filebase, run_id)
+        print("filebase is ",filebase)
+        print("test_shift is ",test_shift)
         if test_shift.split("/")[-1] not in os.listdir(filebase):
             print("HERE", test_shift.split("/")[-1])
             continue

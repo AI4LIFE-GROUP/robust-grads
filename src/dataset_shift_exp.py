@@ -6,6 +6,7 @@ import utils.data_utils as data_utils
 import utils.datasets as datasets
 import training
 import utils.parser_utils as parser_utils
+import utils.exp_utils as exp_utils
 
 '''
     Run fine-tuning experiments on a real-world dataset shift.
@@ -17,7 +18,7 @@ import utils.parser_utils as parser_utils
 def main(args):
 
     random_states = [x for x in range(args.variations)] # no ``base models'', exactly
-
+    
     test_accuracy, train_accuracy, secondary_accuracy = [], [], []
     test_acc_shift, train_acc_shift, sec_acc_shift = [], [], []
     all_train_loss, all_test_loss, all_train_shift_loss, all_test_shift_loss = [], [], [], []

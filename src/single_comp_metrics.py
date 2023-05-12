@@ -388,7 +388,7 @@ def process_shift(args, finetune):
         params = collect_params(args.filebase, run_id)
         dataset, threshold, adversarial = params[0], params[1], params[2]
         fixed_seed = (params[4] == "True")
-        n = int(params[6]) # n = num variations
+        n = int(params[5]) # n = num variations
         activation = params[7]
         lr, lr_decay, weight_decay = params[8], params[9], params[10]
         nodes_per_layer, num_layers = params[12], params[13]

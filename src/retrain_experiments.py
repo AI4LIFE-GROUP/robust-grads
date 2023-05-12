@@ -7,16 +7,15 @@ import utils.exp_utils as exp_utils
 
 def main(args):
     dataset, run_id, output_dir = args.dataset, args.run_id, args.output_dir
-    dataset_shift, fixed_seed, finetune = args.dataset_shift, args.fixed_seed, args.finetune
+    dataset_shift, fixed_seed = args.dataset_shift, args.fixed_seed
     base_repeats, variations = args.base_repeats, args.variations
     threshold = args.threshold
-
     random_states = exp_utils.get_random_states(dataset, dataset_shift, fixed_seed, variations, base_repeats)
 
     test_accuracy, train_accuracy, secondary_accuracy = [], [], []
 
     for r in random_states:
-        add_noise, baseline_model, seed = exp_utils.find_seed(r, dataset_shift, fixed_seed, base_repeats, variations)
+        add_noise, _, seed = exp_utils.find_seed(r, dataset_shift, fixed_seed, base_repeats, variations)
         train, test = datasets.load_data(args.file_base, dataset, r, threshold, add_noise=add_noise, label_col=args.label_col)
 
         secondary_dataset = None
@@ -35,9 +34,9 @@ def main(args):
         if args.linear:
             training.train_linear_models(args, train, test, r)
         elif args.adversarial:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, (finetune and (not baseline_model)), (finetune and baseline_model))
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, False, False)
         else:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, (finetune and (not baseline_model)), (finetune and baseline_model))
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, False, False)
         test_accuracy.append(test_acc)
         train_accuracy.append(train_acc)
         if sec_acc is not None:
@@ -62,7 +61,7 @@ def main(args):
 
     params = [dataset, threshold, args.adversarial, dataset_shift, fixed_seed, 
                 base_repeats, variations, act, args.lr, args.lr_decay, args.weight_decay, 
-                max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, finetune]
+                max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, False]
     np.save(output_dir + "/params_" + run_id + ".npy", params)
     if dataset_shift:
         if 'orig' in dataset:
@@ -79,18 +78,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args = parser_utils.process_args_nn(args)
 
-    args.orig_dataset_shift = False
-    args.shifted_dataset_shift = False
     # if we are testing dataset shift (rather than random perturbation), 
     # call the remaining code 2x, once on original data and once on shifted data
     if args.dataset_shift:
-        args.orig_dataset_shift = True
         args.dataset = args.dataset + '_orig'
         args.run_id = args.run_id + '_orig'
         args.file_base = args.file_base + '_orig'
         main(args)
-        args.orig_dataset_shift = False
-        args.shifted_dataset_shift = True
         args.dataset = args.dataset[:-5] + "_shift"
         args.file_base = args.file_base[:-5] + "_shift"
         args.run_id = args.run_id[:-5] + "_shift"
