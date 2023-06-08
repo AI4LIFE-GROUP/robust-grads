@@ -19,6 +19,9 @@ import shap
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
+'''
+Compute explanation stability for decision trees and XGBoost models.
+'''
 
 # Perturb the dataset -- assumes X is a tensor
 def perturb_X(X, random_state, std_dv):
@@ -94,12 +97,12 @@ def real_world_shift(args, train_X, train_y, test_X, test_y, argstring):
     sec_test_X, sec_test_y = sec_test.data, sec_test.labels
 
     if args.model_type == 'dt':
-        base_model = DecisionTreeClassifier(random_state=0, max_depth=args.max_depth, 
+        base_model = DecisionTreeClassifier(random_state=args.random_state, max_depth=args.max_depth, 
                                             min_samples_leaf=args.min_samples_leaf)
     else:
         base_model = XGBClassifier(n_estimators=args.n_estimators, max_depth=args.max_depth_xgb, 
                                    learning_rate=args.learning_rate, reg_lambda = args.reg_lambda,
-                                   random_state=0)
+                                   seed=1)
     base_model.fit(train_X, train_y)
 
     test_acc = base_model.score(test_X, test_y)
@@ -107,12 +110,12 @@ def real_world_shift(args, train_X, train_y, test_X, test_y, argstring):
     train_acc = base_model.score(train_X, train_y)
 
     if args.model_type == 'dt':
-        shifted_model = DecisionTreeClassifier(random_state=0, max_depth=args.max_depth, 
+        shifted_model = DecisionTreeClassifier(random_state=args.random_state, max_depth=args.max_depth, 
                                                min_samples_leaf=args.min_samples_leaf)
     else:
         shifted_model = XGBClassifier(n_estimators=args.n_estimators, max_depth=args.max_depth_xgb, 
                                    learning_rate=args.learning_rate, reg_lambda = args.reg_lambda, 
-                                   random_state=0)
+                                   seed=1)
     shifted_model.fit(sec_train_X, sec_train_y)
 
     secondary_acc = shifted_model.score(sec_train_X, sec_train_y)
@@ -151,7 +154,7 @@ def synthetic_shift(args, train_X, train_y, test_X, test_y, argstring):
     train_X = orig_scalar.transform(train_X)
 
     if args.model_type == 'dt':
-        base_model = DecisionTreeClassifier(random_state=0, max_depth=args.max_depth, 
+        base_model = DecisionTreeClassifier(random_state=args.random_state, max_depth=args.max_depth, 
                                             min_samples_leaf=args.min_samples_leaf)
     else:
         base_model = XGBClassifier(n_estimators=args.n_estimators, max_depth=args.max_depth_xgb, 
@@ -173,13 +176,12 @@ def synthetic_shift(args, train_X, train_y, test_X, test_y, argstring):
     all_met_lime3, all_met_lime5 = np.zeros((3, args.num_trials)), np.zeros((3, args.num_trials))
     all_met_shap3, all_met_shap5 = np.zeros((3, args.num_trials)), np.zeros((3, args.num_trials))
 
-    #TODO something is broken, all numbers are zero except for lime and k=3
     for r in range(args.num_trials):
         train_X_pert = perturb_X(train_X, r+1, args.threshold)
         train_X_pert = orig_scalar.inverse_transform(train_X_pert)
 
         if args.model_type == 'dt':
-            shifted_model = DecisionTreeClassifier(random_state=0, max_depth=args.max_depth, 
+            shifted_model = DecisionTreeClassifier(random_state=args.random_state, max_depth=args.max_depth, 
                                                    min_samples_leaf=args.min_samples_leaf)
         else:
             shifted_model = XGBClassifier(n_estimators=args.n_estimators, max_depth=args.max_depth_xgb, 
@@ -209,19 +211,17 @@ def synthetic_shift(args, train_X, train_y, test_X, test_y, argstring):
 
 
 def main(args):
-    # TODO data loading isn't working (probably because of lack of "orig" in whobin filename)
-    # FIX by calling into existing data processing code
     if args.dataset_shift:
         args.file_base += "_orig"
     train, test = datasets.load_data(args.file_base, args.dataset, 0, 0, add_noise=False, label_col=args.label_col)
     train_X, train_y = train.data, train.labels
     test_X, test_y = test.data, test.labels
 
-    argstring = args.output_dir + "/" + args.dataset
+    argstring = args.output_dir + "/" + args.dataset + "_r" + str(args.random_state)
     if not args.dataset_shift:        
         argstring += "_t" + str(int(args.threshold*100))
     if args.model_type == 'dt':
-        argstring += "_dt_depth" + str(args.max_depth)
+        argstring += "_dt_depth" + str(args.max_depth) + "_msl" + str(args.min_samples_leaf)
     else:
         argstring += "_xgb_lambda" + str(args.reg_lambda)
     if args.dataset_shift:
@@ -243,9 +243,11 @@ if __name__=="__main__":
     parser.add_argument('--num_trials', type=int, default=10, help="number of random perturbations to average over for synthetic noise case")
     parser.add_argument('--model_type', type=str, default='dt', help="model type, either dt (decision tree) or xgb (xgboost)")
 
+    parser.add_argument('--random_state', type=int, default=0)
     parser.add_argument('--threshold', type=float, default = 0.0)
     parser.add_argument('--num_lime', type=int, default=732, help="number of test samples for which to compute lime/shap explanations")
     parser.add_argument('--num_lime_iters', type=int, default=5000, help="number of iterations for lime")
+    parser.add_argument('--min_samples_leaf',type=int, default=5)
     args = parser.parse_args()
 
     assert args.model_type in ['dt', 'xgb'], "model_type must be either dt or xgb"
@@ -255,8 +257,6 @@ if __name__=="__main__":
     args.max_depth_xgb = 32
     args.learning_rate = 1
 
-    # set additional args for decision tree
-    args.min_samples_leaf = 5
     main(args)
 
 
