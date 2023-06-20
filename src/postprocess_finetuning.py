@@ -6,26 +6,28 @@ import argparse
 
 import utils.metrics as metrics
 
-def get_filename(filebase, run_id, epoch, shift = None, full = False):
+def get_filename(filebase, run_id, epoch, full = False):
     filename = filebase + "/results_" 
     filename = filename + run_id + "_e" + str(epoch) + "_"
     if full:
         filename = filename + "full_"
     return filename
 
-def get_filename_acc_shift(filebase, run_id):
-    train_shift = filebase + "/" + 'accuracy_train_base_' + run_id + '.npy'
-    test_shift = filebase + "/" + 'accuracy_test_base_' + run_id + '.npy'
-    return train_shift, test_shift
+def get_filename_acc(filebase, run_id):
+    train_base = filebase + "/" + 'accuracy_train_base_' + run_id + '.npy'
+    test_base = filebase + "/" + 'accuracy_test_base_' + run_id + '.npy'
+    train_ft = filebase + "/" + 'accuracy_train_ft_' + run_id + '.npy'
+    test_ft = filebase + "/" + 'accuracy_test_ft_' + run_id + '.npy'
+    return train_base, test_base, train_ft, test_ft
 
-def get_filename_loss_shift(filebase, run_id):
+def get_filename_loss(filebase, run_id):
     ''' on orig model, just get loss on orig datasets'''
-    train_shift = filebase + "/" + 'loss_train_ft_' + run_id + '.npy'
-    train_orig = filebase + "/" + 'loss_train_base_' + run_id + '.npy'
-    test_shift = filebase + "/" + 'loss_test_ft_' + run_id + '.npy'
-    test_orig_full = filebase + "/" + 'loss_test_ft_' + run_id + '.npy'
-    return train_shift, train_orig, test_shift, test_orig_full
-
+    train_ft = filebase + "/" + 'loss_train_ft_' + run_id + '.npy'
+    train_base = filebase + "/" + 'loss_train_base_' + run_id + '.npy'
+    test_ft = filebase + "/" + 'loss_test_ft_' + run_id + '.npy'
+    test_base = filebase + "/" + 'loss_test_base_' + run_id + '.npy'
+    return train_base, test_base, train_ft, test_ft
+    
 def get_grads_base(filename, n, base_index, version = 'gradients', fixed_seed = True):
     idx = str((n+1)*base_index)
 
@@ -34,7 +36,7 @@ def get_grads_base(filename, n, base_index, version = 'gradients', fixed_seed = 
 
 
 
-def add_tops_shift(filename_orig, filename_shift, n):
+def add_tops(filename_base, filename_ft, n):
     full_res = []
     metric_names = ['gradients'] 
     for name in metric_names: # 5 or 3
@@ -42,8 +44,8 @@ def add_tops_shift(filename_orig, filename_shift, n):
         grads_raw, grads_normed, grads_angle = [], [], []
 
         for idx in range(n):
-            g1 = np.load(filename_orig + name + str(idx) + ".npy")
-            g2 = np.load(filename_shift + name + str(idx) + ".npy")
+            g1 = np.load(filename_base + name + str(idx) + ".npy")
+            g2 = np.load(filename_ft + name + str(idx) + ".npy")
 
             grads_raw.append(metrics.gradnorm_raw(g1, g2, 2))
             grads_normed.append(metrics.gradnorm_norm(g1, g2, 2))
@@ -88,9 +90,9 @@ def collect_params(filepath, run_id):
         params = np.load(filepath + "/params_" + run_id + ".npy")
     except:
         try:
-            params = np.load(filepath + "/params_" + run_id + "_orig.npy")
+            params = np.load(filepath + "/params_" + run_id + "_base.npy")
         except:
-            params = np.load(filepath + "/params_" + run_id + "_shifted.npy")
+            params = np.load(filepath + "/params_" + run_id + "_ft.npy")
     return params
 
 def main(args):
@@ -107,45 +109,43 @@ def main(args):
         nodes_per_layer, num_layers = params[12], params[13]
         epsilon, beta = params[14], params[15]
 
-        train_shift, test_shift = get_filename_acc_shift(filebase, run_id) 
-        train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift = get_filename_loss_shift(filebase, run_id)
-        print("filebase is ",filebase)
-        print("test_shift is ",test_shift)
-        if test_shift.split("/")[-1] not in os.listdir(filebase):
-            print("HERE", test_shift.split("/")[-1])
+        train_base, test_base, train_ft, test_ft = get_filename_acc(filebase, run_id) 
+        train_loss_base, test_loss_base, train_loss_ft, test_loss_ft = get_filename_loss(filebase, run_id)
+        if test_ft.split("/")[-1] not in os.listdir(filebase):
+            print("HERE (error, couldn't find file)", test_ft.split("/")[-1])
             continue
 
-        train_shift_acc = np.matrix(np.load(train_shift))
-        test_shift_acc = np.matrix(np.load(test_shift))
-        avg_train_shift = np.average(train_shift_acc, axis=0)
-        avg_test_shift = np.average(test_shift_acc, axis=0)
-        train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift = np.load(train_loss_orig), np.load(test_loss_orig), np.load(train_loss_shift), np.load(test_loss_shift)
+        train_ft_acc = np.matrix(np.load(train_ft))
+        test_ft_acc = np.matrix(np.load(test_ft))
+        avg_train_ft = np.average(train_ft_acc, axis=0)
+        avg_test_ft = np.average(test_ft_acc, axis=0)
+        train_loss_base, test_loss_base, train_loss_ft, test_loss_ft = np.load(train_loss_base), np.load(test_loss_base), np.load(train_loss_ft), np.load(test_loss_ft)
         
         for epoch in args.epochs:
             for ft_epoch in args.finetune_epochs:
-                filename = get_filename(filebase, run_id, epoch, shift = 'orig')
-                filename_shift = get_filename(filebase, run_id, ft_epoch, shift = 'shift')
-                filename_orig_full = get_filename(filebase, run_id, epoch, shift = 'orig', full=1)
-                filename_shift_full = get_filename(filebase, run_id,  ft_epoch, shift = 'shift', full=1)
+                filename_base = get_filename(filebase, run_id, epoch)
+                filename_ft = get_filename(filebase, run_id, ft_epoch)
+                filename_base_full = get_filename(filebase, run_id, epoch, full=1)
+                filename_ft_full = get_filename(filebase, run_id,  ft_epoch, full=1)
 
             
                 new_res = [dataset, 0, epoch, ft_epoch, threshold, adversarial, 1, n, activation, lr, lr_decay, weight_decay,
                             nodes_per_layer, num_layers, epsilon, beta, params[16]] # 16 columns
 
                 # add accuracy metrics
-                targets_avg = [avg_train_shift, avg_test_shift]
-                targets = [train_shift_acc, test_shift_acc]
+                targets_avg = [avg_train_ft, avg_test_ft]
+                targets = [train_ft_acc, test_ft_acc]
                 for avg, tar in zip(targets_avg, targets): # 24 columns
                     new_res.append(avg[0,0])
                     for perc in [10,25,50,75,90]:
                         new_res.append(np.percentile(np.array(tar.T[0])[0],perc))
                     new_res.append(np.std(np.array(tar.T[0])))
-                targets = [train_loss_orig, test_loss_orig, train_loss_shift, test_loss_shift]
+                targets = [train_loss_base, test_loss_base, train_loss_ft, test_loss_ft]
                 for tar in targets: # 4 columns
-                    new_res.append(tar[0])
+                    new_res.append(tar[0][-1]) # just add the final loss
 
-                new_res.extend(add_tops_shift(filename, filename_shift_full, n))
-                new_res.extend(add_tops_shift(filename_orig_full, filename_shift, n))
+                new_res.extend(add_tops(filename_base, filename_ft, n))
+                new_res.extend(add_tops(filename_base_full, filename_ft_full, n))
                 all_res.append(new_res)
     df = pd.DataFrame(all_res,columns=columns)
     df.to_csv(args.outputfile + ".csv", index=False)

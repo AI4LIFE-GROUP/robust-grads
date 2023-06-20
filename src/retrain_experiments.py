@@ -29,11 +29,8 @@ def main(args):
                         num_classes=num_classes, activation=args.activation, nodes_per_layer=args.nodes_per_layer,
                         num_layers=args.num_layers, optimizer=args.optimizer, seed=seed, epsilon = args.epsilon, dropout= args.dropout,
                         weight_decay = args.weight_decay)
-        
-        ### TODO move linear to its own file?
-        if args.linear:
-            training.train_linear_models(args, train, test, r)
-        elif args.adversarial:
+
+        if args.adversarial:
             _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, False, False)
         else:
             _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, False, False)
@@ -73,7 +70,6 @@ def main(args):
 
 if __name__ == "__main__":
     parser = parser_utils.create_nn_parser()
-    parser = parser_utils.add_retraining_args(parser)
 
     args = parser.parse_args()
     args = parser_utils.process_args_nn(args)

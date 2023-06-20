@@ -42,7 +42,7 @@ def create_parser():
     parser.add_argument('dataset', type=str)
     parser.add_argument('file_base', type=str, help='file path of dataset through _train or _test')
     parser.add_argument('run_id', type=str)
-    parser.add_argument('--variations', type=int, default=1, help="How many noisy trials to compare against each base model? not used in dataset shift experiments") # how many models to compare, total?
+    parser.add_argument('--variations', type=int, default=10, help="How many noisy trials to compare against each base model? not used in dataset shift experiments") # how many models to compare, total?
     parser.add_argument('--base_repeats', type=int, default=10, help="how many trials to average over") # how many base models do we need to compare with (and average over?)
     parser.add_argument('--dataset_shift', type=bool, default=False, help='true if data represents a real-world, not synthetic, shift')
 
@@ -52,13 +52,6 @@ def create_parser():
     parser.add_argument('--fixed_seed', type=bool, default=False) 
     parser.add_argument('--threshold', type=float, default = 0.0, help='Standard deviation of noise (for gaussian noise on real-valued data) or probability that a feature si flipped (binary data)')
 
-    return parser
-
-def add_retraining_args(parser):
-    ''' For use with baseline_experiments.py'''
-    parser.add_argument('--linear', type=bool, default=False, help='if true, train linear model instead of neural net')
-    
-    
     return parser
 
 def process_args_nn(args):

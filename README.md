@@ -1,11 +1,10 @@
 # robust-grads
 
-
 ## Datasets:
 * [WHO](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who?resource=download)
 * [Adult Income](https://archive.ics.uci.edu/ml/datasets/Adult)
 * [HELOC](https://community.fico.com/s/explainable-machine-learning-challenge)
-Data can be downloaded from the above links; then, use the notebooks in `data` to preprocess the data.
+Our preprocessed data is located in the `data` folder.
 
 The code assumes that there exists `<file_base>_train.csv` and `<file_base>_test.csv` files, where `<file_base>` is the second command-line argument and can be, for example, `data/adult` if the files `data/adult_train.csv` and `data/adult_test.csv` exist. 
 
@@ -69,24 +68,24 @@ Several columns compare different data (original vs shifted), as follows:
 * *  Files with `shift` in the title use the updated test data to evaluate the models trained on the updated training data 
 * * The `orig` files use the original test data to evaluate the models trained using the original training data
 
-To post-process these files into useful data, run `single_comp_metrics.py`, as follows:
+To post-process these files into useful data, run `postprocess_retraining.py`, as follows:
 
-`python3 single_comp_metrics.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn> --epochs <e1> <e2>`
+`python3 postprocess_retraining.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn> --epochs <e1> <e2>`
 
 files_location is where all of the `.npy` files live, i.e., the `output_dir` parameter from `retrain_experiments.py` (default `.`). output_file is the name of the csv file in which to store the results. `--run_id` takes a list of `run_id`'s from potentially multiple runs of `retrain_experiments.py` with different settings (however, all trials must have same `dataset_shift` value and `fixed_seed` value). Epochs is a list of epochs at which data was recorded (ascending order)
 
-`single_comp_metrics.py` will save a CSV file containing aggregate information about explanation robustness. 
+`postprocess_retraining.py` will save a CSV file containing aggregate information about explanation robustness. 
 
 #### Fine-tuning models
-Use `dataset_shift_exp.py` to run fine-tuning experiments on real-world data shifts.
+Use `finetune_experiments.py` to run fine-tuning experiments on real-world data shifts.
 
-`python3 dataset_shift_exp.py <dataset> <file_base> <run_id>`
+`python3 finetune_experiments.py <dataset> <file_base> <run_id>`
 
 The same command-line parameters as for `retrain_experiments.py` can be used, and have the same defaults, except for `--epochs` whose default is 1000. There is one additional command-line parameter, `--finetune_epochs` (default 250), which is the number of additional epochs for fine-tuning.
 
-To post-process the raw output, run `comp_fs_shift.py`, e.g.,
+To post-process the raw output, run `postprocess_finetuning.py`, e.g.,
 
-`python3 comp_fs_shift.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn>`
+`python3 postprocess_finetuning.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn>`
 
 ### Synthetic dataset shift (Gaussian noise)
 #### Retraining models
@@ -101,5 +100,6 @@ These additional command-line parameters will be useful.
 
 #### Fine-tuning models
 TODO
+`finetune_synth_experiments`
 
 

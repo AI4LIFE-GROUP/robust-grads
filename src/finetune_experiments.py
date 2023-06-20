@@ -1,41 +1,41 @@
 import numpy as np
+import pandas as pd
+from torch import nn
 
+import utils.data_utils as data_utils
 import utils.datasets as datasets
-import utils.parser_utils as parser_utils
 import training
+import utils.parser_utils as parser_utils
 import utils.exp_utils as exp_utils
 
-def shift_main(args):
-    random_states = [x for x in range(args.variations)] # no ``base models'', exactly
+'''
+    finetune_experiments.py
+    Run fine-tuning experiments on a real-world dataset shift
+
+    To run retraining experiments, use retraining_experiments.py instead
+    To run fine-tuning experiments with synthetic noise, use finetune_synth_experiments.py instead
+'''
 
 def main(args):
-    dataset, run_id, output_dir = args.dataset, args.run_id, args.output_dir
-    dataset_shift, fixed_seed, finetune = args.dataset_shift, args.fixed_seed, True
-    base_repeats, variations = args.base_repeats, args.variations
-    file_base = args.file_base
-    threshold = args.threshold
 
-    random_states_base = [x for x in range(args.base_repeats)]
-    random_states_var = [x for x in range(args.variations)]
+    random_states = [x for x in range(args.variations)] # no ``base models'', exactly
+    
+    test_accuracy, train_accuracy, secondary_accuracy = [], [], []
+    test_acc_shift, train_acc_shift, sec_acc_shift = [], [], []
+    all_train_loss, all_test_loss, all_train_shift_loss, all_test_shift_loss = [], [], [], []
 
-    test_accuracy_base, train_accuracy_base, secondary_accuracy_base = [], [], []
-    test_loss_all_base, train_loss_all_base = [], []
+    finetune = args.finetune
+    orig_run_id = args.run_id
 
-    test_accuracy_ft, train_accuracy_ft, secondary_accuracy_ft = [], [], []
-    test_loss_all_ft, train_loss_all_ft = [], []
-
-    for r in random_states_base:
-        if args.dataset_shift:
-            dataset = args.dataset + '_orig'
-            file_base = args.file_base + '_orig'
-        # only add synthetic noise before fine-tuning.
-        add_noise = False
+    for r in random_states:
+        args.run_id = orig_run_id
         seed = r
 
-        train, test = datasets.load_data(file_base, dataset, r, threshold, add_noise=add_noise, label_col=args.label_col)
-        secondary_dataset = None
-        if dataset_shift:
-            secondary_dataset = datasets.load_secondary_dataset(dataset, file_base, r, threshold, add_noise=add_noise, label_col=args.label_col)
+        train, test = datasets.load_data(args.file_base, args.dataset,  r, args.threshold, add_noise=False, label_col = args.label_col)
+
+        sec_name = args.dataset.replace('orig', 'shift')
+        file_base = args.file_base.replace('orig', 'shift')
+        shifted_train, shifted_test = datasets.load_data(file_base, sec_name, r, args.threshold, add_noise=False, label_col = args.label_col)
 
         num_feat = train.num_features()
         num_classes = train.num_classes()
@@ -46,75 +46,75 @@ def main(args):
                         weight_decay = args.weight_decay)
         
         if args.adversarial:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, False, True)
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
         else:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, dataset, output_dir, run_id, secondary_dataset, False, True)
-        test_accuracy_base.append(test_acc)
-        train_accuracy_base.append(train_acc)
-        test_loss_all_base.append(test_loss)
-        train_loss_all_base.append(train_loss)
-        if sec_acc is not None:
-            secondary_accuracy_base.append(sec_acc)
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
+        test_accuracy.append(test_acc)
+        train_accuracy.append(train_acc)
+        secondary_accuracy.append(sec_acc)
+        all_train_loss.append(train_loss)
+        all_test_loss.append(test_loss)
+        
 
-        # train 
-        if dataset_shift:
-            dataset = dataset.replace('orig', 'shift')
-            file_base = file_base.replace('orig', 'shift')
-        params_ft = training.Params(args.lr, args.lr_decay, args.finetune_epochs, args.lime_finetune_epochs, args.batch_size, loss_fn=args.loss, num_feat=num_feat, 
-                        num_classes=num_classes, activation=args.activation, nodes_per_layer=args.nodes_per_layer,
-                        num_layers=args.num_layers, optimizer=args.optimizer, seed=seed, epsilon = args.epsilon, dropout= args.dropout,
-                        weight_decay = args.weight_decay)
-        for r2 in random_states_var:
-            add_noise = (not dataset_shift)
-            seed = r2
+        params.epochs = args.finetune_epochs
+        params.lime_epochs = args.lime_finetune_epochs
+        params.learning_rate = args.lr * (0.4)
+        args.run_id += "_shifted"
+        if args.adversarial:
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, shifted_train, shifted_test, r, args.dataset, args.output_dir, args.run_id, test, finetune=finetune)
+        else:
+            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, shifted_train, shifted_test, r, args.dataset, args.output_dir, args.run_id, test, finetune=finetune)
 
-            if add_noise:
-                train, test = datasets.load_data(file_base, dataset, r2, threshold, add_noise=add_noise, label_col=args.label_col)
-            elif dataset_shift:
-                train, test = datasets.load_data(file_base, dataset, r2, threshold, add_noise=add_noise, label_col=args.label_col)
-                secondary_dataset = datasets.load_secondary_dataset(dataset, file_base, r2, threshold, add_noise=add_noise, label_col=args.label_col)
+        test_acc_shift.append(test_acc)
+        train_acc_shift.append(train_acc)
+        sec_acc_shift.append(sec_acc_shift)
+        all_train_shift_loss.append(train_loss)
+        all_test_shift_loss.append(test_loss)
 
-            if args.adversarial:
-                _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params_ft, train, test, r, dataset, output_dir, run_id, secondary_dataset, True, False)
-            else:
-                _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params_ft, train, test, r, dataset, output_dir, run_id, secondary_dataset, True, False)
 
-            test_accuracy_ft.append(test_acc)
-            train_accuracy_ft.append(train_acc)
-            test_loss_all_ft.append(test_loss)
-            train_loss_all_ft.append(train_loss)
-            if sec_acc is not None:
-                secondary_accuracy_ft.append(sec_acc)
+    trainacc = [round(train_accuracy[i][-1]*100, 2) for i in range(len(train_accuracy))]
+    print("Train acc: ", trainacc)
+    print("avg: ", sum(trainacc)/len(trainacc), " min: ", min(trainacc))
+    testacc = [round(test_accuracy[i][-1]*100, 2) for i in range(len(test_accuracy))]
+    print("Test acc: ", testacc)
+    print("avg: ", sum(testacc)/len(testacc), " min: ", min(testacc))
 
-    # save accuracy/loss
-    np.save(output_dir + "/accuracy_train_base_" + run_id + ".npy", train_accuracy_base)
-    np.save(output_dir + "/accuracy_test_base_" + run_id + ".npy", test_accuracy_base)
-    np.save(output_dir + "/loss_train_base_" + run_id + ".npy", np.array(train_loss_all_base))
-    np.save(output_dir + "/loss_test_base_" + run_id + ".npy", np.array(test_loss_all_base))
-    np.save(output_dir + "/accuracy_train_ft_" + run_id + ".npy", train_accuracy_ft)
-    np.save(output_dir + "/accuracy_test_ft_" + run_id + ".npy", test_accuracy_ft)
-    np.save(output_dir + "/loss_train_ft_" + run_id + ".npy", np.array(train_loss_all_ft))
-    np.save(output_dir + "/loss_test_ft_" + run_id + ".npy", np.array(test_loss_all_ft))
+    if type(args.activation) == type(nn.ReLU()):
+        act = "relu"
+    elif type(args.activation) == type(nn.Softplus(beta=5)):
+        act = "soft"
+    
+    args.run_id = orig_run_id
+    np.save(args.output_dir + "/accuracy_train_base_" + args.run_id + ".npy", train_accuracy)
+    np.save(args.output_dir + "/accuracy_test_base_" + args.run_id + ".npy", test_accuracy)
+    np.save(args.output_dir + "/accuracy_train_ft_" + args.run_id + ".npy", train_acc_shift)
+    np.save(args.output_dir + "/accuracy_test_ft_" + args.run_id + ".npy", test_acc_shift)
+    np.save(args.output_dir + "/loss_train_base_" + args.run_id + ".npy", all_train_loss)
+    np.save(args.output_dir + "/loss_test_base_" + args.run_id + ".npy", all_test_loss)
+    np.save(args.output_dir + "/loss_train_ft_" + args.run_id + ".npy", all_train_shift_loss)
+    np.save(args.output_dir + "/loss_test_ft_" + args.run_id + ".npy", all_test_shift_loss)
+    params = [args.dataset, 0, args.adversarial, args.dataset_shift, args.fixed_seed, 
+                1, args.variations, act, args.lr, args.lr_decay, args.weight_decay, 
+                max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, args.finetune]
+    np.save(args.output_dir + "/params_" + args.run_id + ".npy", params)
 
-    # save params
-    act = exp_utils.get_activation(args.activation)
-    params = [dataset, threshold, args.adversarial, dataset_shift, fixed_seed, 
-                base_repeats, variations, act, args.lr, args.lr_decay, args.weight_decay, 
-                max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, True]
-    np.save(output_dir + "/params_" + run_id + ".npy", params)
-    if dataset_shift:
-            np.save(output_dir + "/accuracy_test_sec_origmodel_" + run_id + ".npy", secondary_accuracy_base)
-            np.save(output_dir + "/accuracy_test_sec_ftmodel_" + run_id + ".npy", secondary_accuracy_ft)
+
     return 1
 
 if __name__ == "__main__":
     parser = parser_utils.create_nn_parser()
-    parser = parser_utils.add_retraining_args(parser)
 
     args = parser.parse_args()
-    args = parser_utils.process_args_nn(args)
 
     args.finetune = True
-    args.fixed_seed = False # fixed seed doesn't make sense -- we compare models starting with the base model weights
+    args.dataset_shift = True
+    args.threshold = 0 # do not add random noise to data
 
+    args = parser_utils.process_args_nn(args)
+    
+    args.shifted_dataset_shift = False
+    args.orig_dataset_shift = True
+    args.dataset = args.dataset + '_orig'
+    args.file_base = args.file_base + '_orig'
     main(args)
+
