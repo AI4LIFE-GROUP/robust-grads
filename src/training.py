@@ -23,14 +23,6 @@ class Params():
         self.step_size = step_size
         self.gamma = gamma
 
-def train_adv_nn(params, train, test, random_state, dataset, output_dir, run_id, secondary_dataset=None, finetune = False, finetune_base = False):
-    test_dataloader = DataLoader(test, batch_size=params.batch_size, shuffle=False)
-    train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)
-    
-    nn_model, test_acc, train_acc, secondary_acc, test_loss, train_loss = neural_net.dnn_adversarial(train, train_dataloader, test_dataloader, params, dataset, random_state, output_dir, run_id, secondary_dataset, finetune, finetune_base)
-
-    return nn_model, test_acc, train_acc, secondary_acc, test_loss, train_loss
-
 def train_nn(params, train, test, random_state, dataset, output_dir, run_id, secondary_dataset=None, finetune = False, finetune_base = False):
     
     train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)

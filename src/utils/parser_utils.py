@@ -11,7 +11,7 @@ def create_tree_parser():
     
 def create_nn_parser():
     parser = create_parser()
-    parser.add_argument('--adversarial', type=bool, default=False)
+    parser.add_argument('--adversarial', type=bool, default=False, help="Included for compatibility with other scripts. Not used currently, is always False")
     
     parser.add_argument('--lr', type=float, default=0.2)
     parser.add_argument('--lr_decay', type=float, default=0.8) # TODO - figure out default. was 0 for Dan

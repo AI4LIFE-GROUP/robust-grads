@@ -29,7 +29,7 @@ def get_random_states(dataset, dataset_shift, fixed_seed, variations, base_repea
                 random_states = [x + base_repeats for x in range(base_repeats)]
     else:
         if fixed_seed:
-            # we need variations # of base models and then base_repeats # of comparison models for each
+            # we need base_repeats # of base models and then variations # of comparison models for each
             random_states = [x for x in range((variations + 1)*base_repeats)]     
         else:
             # we need base_repeats # of base models and then variations # of comparison models total
@@ -57,7 +57,7 @@ def find_seed(r, dataset_shift, fixed_seed, base_repeats, variations):
     if (not dataset_shift) and (not fixed_seed) and (r < base_repeats):
             baseline_model = True           
             add_noise = False
-    elif (r % (variations + 1) == 0):
+    elif (dataset_shift or fixed_seed) and (r % (variations + 1) == 0):
         baseline_model = True
         add_noise = False
     else: 
@@ -71,4 +71,21 @@ def find_seed(r, dataset_shift, fixed_seed, base_repeats, variations):
     else:
         seed = r
     return add_noise, baseline_model, seed
+
+def get_related_models(r, fixed_seed, base_repeats, variations):
+    '''
+    Given a baseline model index, get the indices of models that should be used in direct comparison
+    (e.g., if we train a base model with seed s, we need to compare with fine-tuned models with seeds
+    s + 1, s + 2, ..., s + variations)
+    '''
+    # ignore dataset shift because this is only relevant for synthetic models where we are adding noise
+    if fixed_seed:
+        original_model_seed = r * (variations + 1)
+        seeds_to_compare = [x for x in range(original_model_seed, original_model_seed + variations)]
+    else:
+        original_model_seed = r
+        seeds_to_compare = [base_repeats + x for x in range(variations)]
+    return original_model_seed, seeds_to_compare
+
+
         

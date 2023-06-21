@@ -1,12 +1,9 @@
 import numpy as np
-import pandas as pd
 from torch import nn
 
-import utils.data_utils as data_utils
 import utils.datasets as datasets
 import training
 import utils.parser_utils as parser_utils
-import utils.exp_utils as exp_utils
 
 '''
     finetune_experiments.py
@@ -45,10 +42,8 @@ def main(args):
                         num_layers=args.num_layers, optimizer=args.optimizer, seed=seed, epsilon = args.epsilon, dropout= args.dropout,
                         weight_decay = args.weight_decay)
         
-        if args.adversarial:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
-        else:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
+        _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, train, test, r, args.dataset, args.output_dir, args.run_id, shifted_test, finetune_base=finetune)
+        
         test_accuracy.append(test_acc)
         train_accuracy.append(train_acc)
         secondary_accuracy.append(sec_acc)
@@ -60,10 +55,8 @@ def main(args):
         params.lime_epochs = args.lime_finetune_epochs
         params.learning_rate = args.lr * (0.4)
         args.run_id += "_shifted"
-        if args.adversarial:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_adv_nn(params, shifted_train, shifted_test, r, args.dataset, args.output_dir, args.run_id, test, finetune=finetune)
-        else:
-            _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, shifted_train, shifted_test, r, args.dataset, args.output_dir, args.run_id, test, finetune=finetune)
+        
+        _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, shifted_train, shifted_test, r, sec_name, args.output_dir, args.run_id, test, finetune=finetune)
 
         test_acc_shift.append(test_acc)
         train_acc_shift.append(train_acc)
@@ -93,7 +86,7 @@ def main(args):
     np.save(args.output_dir + "/loss_test_base_" + args.run_id + ".npy", all_test_loss)
     np.save(args.output_dir + "/loss_train_ft_" + args.run_id + ".npy", all_train_shift_loss)
     np.save(args.output_dir + "/loss_test_ft_" + args.run_id + ".npy", all_test_shift_loss)
-    params = [args.dataset, 0, args.adversarial, args.dataset_shift, args.fixed_seed, 
+    params = [args.dataset, 0, 0, args.dataset_shift, args.fixed_seed, 
                 1, args.variations, act, args.lr, args.lr_decay, args.weight_decay, 
                 max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, args.finetune]
     np.save(args.output_dir + "/params_" + args.run_id + ".npy", params)

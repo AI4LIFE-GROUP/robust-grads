@@ -6,9 +6,12 @@ import argparse
 
 import utils.metrics as metrics
 
-def get_filename(filebase, run_id, epoch, full = False):
+def get_filename(filebase, run_id, epoch, full = False, finetune = False):
     filename = filebase + "/results_" 
-    filename = filename + run_id + "_e" + str(epoch) + "_"
+    filename = filename + run_id 
+    if finetune:
+        filename = filename + "_shifted"
+    filename = filename + "_e" + str(epoch) + "_"
     if full:
         filename = filename + "full_"
     return filename
@@ -64,7 +67,7 @@ def get_columns():
     columns = ['dataset', 'iteration', 'epochs', 'finetune_epochs', 'threshold', 'adversarial', 'fixed_seed', 'variations', 'activation',
                 'lr', 'lr_decay', 'weight_decay', 'nodes_per_layer', 'num_layers', 'epsilon', 'beta', 'finetune']
 
-    options = ['train_shift', 'test_shift']
+    options = ['train_ft', 'test_ft', 'train_base', 'test_base']
 
     for t in options:
         columns.append(t + "_acc")
@@ -115,8 +118,12 @@ def main(args):
             print("HERE (error, couldn't find file)", test_ft.split("/")[-1])
             continue
 
+        train_base_acc = np.matrix(np.load(train_base))
+        test_base_acc = np.matrix(np.load(test_base))
         train_ft_acc = np.matrix(np.load(train_ft))
         test_ft_acc = np.matrix(np.load(test_ft))
+        avg_train_base = np.average(train_base_acc, axis=0)
+        avg_test_base = np.average(test_base_acc, axis=0)
         avg_train_ft = np.average(train_ft_acc, axis=0)
         avg_test_ft = np.average(test_ft_acc, axis=0)
         train_loss_base, test_loss_base, train_loss_ft, test_loss_ft = np.load(train_loss_base), np.load(test_loss_base), np.load(train_loss_ft), np.load(test_loss_ft)
@@ -124,17 +131,17 @@ def main(args):
         for epoch in args.epochs:
             for ft_epoch in args.finetune_epochs:
                 filename_base = get_filename(filebase, run_id, epoch)
-                filename_ft = get_filename(filebase, run_id, ft_epoch)
+                filename_ft = get_filename(filebase, run_id, ft_epoch, finetune=True)
                 filename_base_full = get_filename(filebase, run_id, epoch, full=1)
-                filename_ft_full = get_filename(filebase, run_id,  ft_epoch, full=1)
+                filename_ft_full = get_filename(filebase, run_id,  ft_epoch, full=1, finetune=True)
 
             
                 new_res = [dataset, 0, epoch, ft_epoch, threshold, adversarial, 1, n, activation, lr, lr_decay, weight_decay,
                             nodes_per_layer, num_layers, epsilon, beta, params[16]] # 16 columns
 
                 # add accuracy metrics
-                targets_avg = [avg_train_ft, avg_test_ft]
-                targets = [train_ft_acc, test_ft_acc]
+                targets_avg = [avg_train_ft, avg_test_ft, avg_train_base, avg_test_base]
+                targets = [train_ft_acc, test_ft_acc, train_base_acc, test_base_acc]
                 for avg, tar in zip(targets_avg, targets): # 24 columns
                     new_res.append(avg[0,0])
                     for perc in [10,25,50,75,90]:
@@ -144,6 +151,7 @@ def main(args):
                 for tar in targets: # 4 columns
                     new_res.append(tar[0][-1]) # just add the final loss
 
+                print("filename is ",filename_base," and ft is ",filename_ft, " and base fulli s ", filename_base_full, " and ft full is ", filename_ft_full)
                 new_res.extend(add_tops(filename_base, filename_ft, n))
                 new_res.extend(add_tops(filename_base_full, filename_ft_full, n))
                 all_res.append(new_res)

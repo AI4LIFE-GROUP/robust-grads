@@ -1,4 +1,3 @@
-import copy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,11 +6,7 @@ from torch.utils.data import DataLoader
 from captum.attr import Saliency
 from captum.attr import NoiseTunnel
 from captum.attr import Lime
-from captum.attr import LimeBase
 from captum.attr import KernelShap
-from captum._utils.models.linear_model import SkLearnLinearModel
-#
-#import adversarial
 
 def train_loop(dataloader, model, loss_fn, optimizer, scheduler, printmode=False):
     size = len(dataloader.dataset)
@@ -146,102 +141,6 @@ def get_activation_term(activation):
         act = 'leak'
     return act
 
-def dnn_adversarial(train, train_dataloader, test_dataloader, params, dataset, random_state, output_dir, run_id, secondary_dataset, finetune, finetune_base):
-    torch.manual_seed(params.manual_seed)
-    
-    train.labels = np.transpose(np.array(train.labels))[0]
-    orig_train = copy.deepcopy(train)
-
-    epochs = params.epochs
-    lime_epochs = params.lime_epochs
-    
-    if dataset == 'mnist':
-        model = CNN()
-    else:
-        model = NeuralNetwork(params.num_feat, params.num_classes, params.activation, 
-                          params.nodes_per_layer, params.num_layers, params.dropout)
-        if finetune:
-            model.load_state_dict(torch.load(output_dir + 'model_' + str(params.manual_seed) + '.pt'))
-
-    if params.optimizer == 'amsgrad':
-        optimizer = torch.optim.Adam(model.parameters(), lr=params.learning_rate, amsgrad=True)
-    elif params.optimizer == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), lr=params.learning_rate)
-    else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=params.learning_rate, weight_decay=params.weight_decay)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.9, last_epoch=- 1, verbose=False)
-    
-    secondary_dataloader = None
-    if secondary_dataset is not None:
-        secondary_dataloader = DataLoader(secondary_dataset, batch_size=params.batch_size, shuffle=False)
-
-    orig_lr = params.learning_rate
-    all_acc_train, all_acc_test, all_sec_acc = np.zeros(max(epochs)), np.zeros(max(epochs)), None
-    all_loss_train, all_loss_test = np.zeros(max(epochs)), np.zeros(max(epochs))
-    if secondary_dataset is not None:
-        all_sec_acc = np.zeros(max(epochs))
-    for t in range(max(epochs)):
-        printmode=False
-        if ((t+1)%5 == 0):
-            printmode=True
-            print(f"Epoch {t+1}\n-------------------------------")
-        all_acc_train[t], all_loss_train[t] = train_loop(train_dataloader, model, params.loss_fn, optimizer, scheduler, printmode)
-        if dataset in ['income', 'compas'] or ('whobin' in dataset):
-            adv_examples, _ = adversarial.get_adversarial_example(params, model, orig_train.data, orig_train.labels, params.epsilon, printmode)
-        else:
-            adv_examples, _ = adversarial.get_adversarial_example_reg(params, model, orig_train.data, orig_train.labels, params.epsilon)
-        
-        all_acc_test[t], all_loss_test[t] = test_loop(test_dataloader, model, params.loss_fn, printmode)
-
-        train.data = adv_examples
-        train_dataloader = DataLoader(train, batch_size=params.batch_size, shuffle=True)
-
-        secondary_test_acc = None
-
-        if ((t+1) in epochs):
-            start_str = output_dir + "/results_"
-            if 'shift' in dataset:
-                start_str = start_str + "shift_" + run_id + "_e" + str(t+1) + "_" 
-            elif 'orig' in dataset:
-                start_str = start_str + "orig_" + run_id + "_e" + str(t+1) + "_"
-            else:
-                start_str = start_str + run_id + "_e" + str(t+1) + "_"
-            test_lime = False
-            if ((t+1) in lime_epochs):
-                test_lime = True
-            if secondary_dataset is not None:
-                if 'orig' in dataset:
-                    eval_model(test_dataloader, model, start_str, random_state, test_lime) # original, partial dataset
-                    eval_model(secondary_dataloader, model, start_str + "full_", random_state, test_lime) # full, shifted data
-                    secondary_test_acc, _ = test_loop(secondary_dataloader, model, params.loss_fn)
-                else:
-                    eval_model(secondary_dataloader, model, start_str, random_state, test_lime) # original, partial dataset
-                    eval_model(test_dataloader, model, start_str + "full_", random_state, test_lime) # full, shifted data
-                    secondary_test_acc, _ = test_loop(test_dataloader, model, params.loss_fn)
-                all_sec_acc.append(secondary_test_acc)
-            else:
-                eval_model(test_dataloader, model, start_str, random_state, test_lime)
-    
-    params.learning_rate = orig_lr # reset for iterating on next random seed
-    if finetune_base:
-        torch.save(model.state_dict(), output_dir + 'model_' + str(params.manual_seed) + '.pt')
-    elif finetune:
-        orig_model = NeuralNetwork(params.num_feat, params.num_classes, params.activation, 
-                          params.nodes_per_layer, params.num_layers, params.dropout)
-        orig_model.load_state_dict(torch.load(output_dir + 'model_' + run_id + str(params.manual_seed) + '.pt'))
-
-        diff_squared=0
-        for s,m in zip(orig_model.stack, model.stack):
-            if type(s) == torch.nn.modules.linear.Linear:
-                diff_squared += ((s.weight-m.weight)**2).sum().item()
-        diff_squared = diff_squared ** 0.5
-        np.save("theta_diff_" + run_id + "_" + str(random_state) + ".npy",diff_squared)
-    else:
-        # save model so we can compute theta diff later
-        torch.save(model.state_dict(), output_dir + 'model_' + run_id + str(random_state) + '.pt')
-       
-    return model, np.array(all_acc_test), np.array(all_acc_train), np.array(all_sec_acc), np.array(all_loss_test), np.array(all_loss_train)
-
 class Modified_Model_Lime(nn.Module):
     def __init__(self, model, y):
         super(Modified_Model_Lime, self).__init__()
@@ -351,7 +250,7 @@ def dnn(train_dataloader, test_dataloader, params, dataset, output_dir, secondar
         model = NeuralNetwork(params.num_feat, params.num_classes, params.activation, 
                           params.nodes_per_layer, params.num_layers, params.dropout)
         if finetune:
-            print("loading model state")
+            print("loading model state with seed", params.manual_seed," and program random state", random_state)
             model.load_state_dict(torch.load(output_dir + 'model_' + str(params.manual_seed) + '.pt'))
 
     epochs = params.epochs

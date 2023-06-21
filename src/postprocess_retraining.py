@@ -470,8 +470,8 @@ def main(args):
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('filebase', type=str)
-    parser.add_argument('outputfile', type=str) # don't include .csv extension
+    parser.add_argument('filebase', type=str, help='directory where .npy file outputs are stored')
+    parser.add_argument('outputfile', type=str, help='name of output csv file -- do not include .csv extension') 
     parser.add_argument('--run_id', type=str, nargs='+')
     parser.add_argument('--epochs', type=int, nargs='+', help="all epochs we collected data for in ascending order")
     parser.add_argument('--lime_epochs', type=int, nargs='+', default=None, help="epochs we collected lime data for in ascending order")

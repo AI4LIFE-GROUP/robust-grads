@@ -85,7 +85,9 @@ The same command-line parameters as for `retrain_experiments.py` can be used, an
 
 To post-process the raw output, run `postprocess_finetuning.py`, e.g.,
 
-`python3 postprocess_finetuning.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn>`
+`python3 postprocess_finetuning.py <files_location> <output_file> --run_id <run_id1> <run_id2> <run_idn> --epochs <e1> --finetune_epochs <f1>`
+
+Note that you must specify the epoch(s) at which the data was measured. 
 
 ### Synthetic dataset shift (Gaussian noise)
 #### Retraining models
@@ -99,7 +101,12 @@ These additional command-line parameters will be useful.
 
 
 #### Fine-tuning models
-TODO
-`finetune_synth_experiments`
+For fine-tuning experiments on synthetic data shifts, use `finetune_synth_experiments.py` to run the experiments and `postprocess_finetuning_synth.py` to postprocess the results. E.g., 
+
+`finetune_synth_experiments.py heloc <path_to_data> <run_id> --threshold 0.1`
+
+`python postprocess_finetuning_synth.py . <output_file> --run_id <run_id> --epochs <e1> --finetune_epochs <f1>`
+
+
 
 
