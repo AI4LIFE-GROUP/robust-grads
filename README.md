@@ -1,4 +1,5 @@
 # robust-grads
+Code for [On Minimizing the Impact of Dataset Shifts on Actionable Explanations](https://arxiv.org/abs/2306.06716), UAI 2023, by Anna P. Meyer, Dan Ley, Suraj Srinivas, and Himabindu Lakkaraju
 
 ## Datasets:
 * [WHO](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who?resource=download)
