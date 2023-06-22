@@ -14,7 +14,7 @@ def create_nn_parser():
     parser.add_argument('--adversarial', type=bool, default=False, help="Included for compatibility with other scripts. Not used currently, is always False")
     
     parser.add_argument('--lr', type=float, default=0.2)
-    parser.add_argument('--lr_decay', type=float, default=0.8) # TODO - figure out default. was 0 for Dan
+    parser.add_argument('--lr_decay', type=float, default=0.8) 
     parser.add_argument('--weight_decay', type=float, default=0.0)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--activation', type=str, default='relu')
@@ -32,6 +32,7 @@ def create_nn_parser():
     parser.add_argument('--lime_finetune_epochs', type=int, default=None, nargs='+', help='epoch(s) at which to calculate lime and shap when fine-tuning, in ascending order. If omitted, finetune_epochs is used')
 
     parser.add_argument('--finetune', type=bool, default = False)
+    parser.add_argument('--lr_finetune', type=float, default=None)
     return parser
 
 def create_parser():
@@ -71,6 +72,8 @@ def process_args_nn(args):
         args.lime_epochs = args.epochs
     if args.lime_finetune_epochs is None:
         args.lime_finetune_epochs = args.finetune_epochs
+    if args.lr_finetune is None:
+        args.lr_finetune = args.lr
 
     if args.dataset_shift and (args.variations > 1):
         print("Variations must be 1 for dataset shift experiments. Setting variations=1 now.")

@@ -4,6 +4,7 @@
 * [WHO](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who?resource=download)
 * [Adult Income](https://archive.ics.uci.edu/ml/datasets/Adult)
 * [HELOC](https://community.fico.com/s/explainable-machine-learning-challenge)
+
 Our preprocessed data is located in the `data` folder.
 
 The code assumes that there exists `<file_base>_train.csv` and `<file_base>_test.csv` files, where `<file_base>` is the second command-line argument and can be, for example, `data/adult` if the files `data/adult_train.csv` and `data/adult_test.csv` exist. 
@@ -12,9 +13,9 @@ The code assumes that there exists `<file_base>_train.csv` and `<file_base>_test
 Our code relies on standard python libraries like `numpy`, `pandas`, and `pytorch`. We also use the [Captum](https://captum.ai/) library to compute explanations.
 
 ## To replicate our results:
-For the WHO results, run `exps.sh`. CSV files will be saved as `ft_res_who.csv` for fine-tuning (Sec 4.1) and `rt_res_who` for retraining (Sec 4.2). 
+For the WHO results, run `exps_who.sh`. CSV files will be saved as `ft_res_who.csv` for fine-tuning (Sec 4.1) and `rt_res_who` for retraining (Sec 4.2). 
 
-For Adult/HELOC - TODO
+For Adult and HELOC, similarly, run `exps_adult.sh` and `exps_heloc.sh`, respectively, for a subset of the experiments (all experiments with added synthetic noise with a standard deviation of 0.001.) 
 
 ## To run custom experiments:
 The code is broken into a few pieces, depending on your goals. 
@@ -91,14 +92,15 @@ Note that you must specify the epoch(s) at which the data was measured.
 
 ### Synthetic dataset shift (Gaussian noise)
 #### Retraining models
-To compare models that are retrained from scratch, follow the same results as for real-world dataset shift retrained models (i.e., run `retrain_experiments.py` as described above, but omit the `dataset_shift` command-line parameter.)
+To compare models that are retrained from scratch, follow the same results as for real-world dataset shift retrained models (i.e., run `retrain_experiments.py` as described above, but omit the `dataset_shift` command-line parameter.) Make sure to specify `fixed_seed 1` as a command-line parameter, otherwise, results will vary a lot based on using different random seeds to train the networks.
 
 These additional command-line parameters will be useful.
 * `--threshold` default 0. Standard deviation of gaussian noise to add (for continuous features), or probability of modifying each feature (for binary features)
-* `--base_repeats` default 10. How many "base models" to average over. The usage depends on whether `--fixed_seed` is true
+* `--base_repeats` default 10. How many "base models" to use. Exact implementation depends on whether `fixed_seed` is True (it is True in all of the paper experiments), as described below.
 * * For example, if fixed_seed is false, `--variations=5` and `--base_repeats=10`, we will train 10 base models and 5 modified models, for a total of 15 models. We compare each of the modified models with each of the base models. All 15 models that we train will use different random initializations.
 * * For example, if `--fixed_seed=1`, `--variations=5`, and `--base_repeats=10`, we will train 10 base models and 5 modified models for each base model, for a total of 60 models. Each base model will be trained using a different model initialization, and all of the 5 modified models corresponding to it will use the same model initialization.
 
+Note that our experiments only vary `base_repeats`, however, we leave `variations` in the code as a way to make more comparisons more quickly in the future.
 
 #### Fine-tuning models
 For fine-tuning experiments on synthetic data shifts, use `finetune_synth_experiments.py` to run the experiments and `postprocess_finetuning_synth.py` to postprocess the results. E.g., 

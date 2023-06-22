@@ -15,7 +15,7 @@ import utils.parser_utils as parser_utils
 
 def main(args):
 
-    random_states = [x for x in range(args.variations)] # no ``base models'', exactly
+    random_states = [x for x in range(args.base_repeats)]
     
     test_accuracy, train_accuracy, secondary_accuracy = [], [], []
     test_acc_shift, train_acc_shift, sec_acc_shift = [], [], []
@@ -53,7 +53,7 @@ def main(args):
 
         params.epochs = args.finetune_epochs
         params.lime_epochs = args.lime_finetune_epochs
-        params.learning_rate = args.lr * (0.4)
+        params.learning_rate = args.lr_finetune
         args.run_id += "_shifted"
         
         _, test_acc, train_acc, sec_acc, test_loss, train_loss = training.train_nn(params, shifted_train, shifted_test, r, sec_name, args.output_dir, args.run_id, test, finetune=finetune)
@@ -87,7 +87,7 @@ def main(args):
     np.save(args.output_dir + "/loss_train_ft_" + args.run_id + ".npy", all_train_shift_loss)
     np.save(args.output_dir + "/loss_test_ft_" + args.run_id + ".npy", all_test_shift_loss)
     params = [args.dataset, 0, 0, args.dataset_shift, args.fixed_seed, 
-                1, args.variations, act, args.lr, args.lr_decay, args.weight_decay, 
+                args.base_repeats, args.variations, act, args.lr, args.lr_decay, args.weight_decay, 
                 max(args.epochs), args.nodes_per_layer, args.num_layers, args.epsilon, args.beta, args.finetune]
     np.save(args.output_dir + "/params_" + args.run_id + ".npy", params)
 
@@ -102,6 +102,7 @@ if __name__ == "__main__":
     args.finetune = True
     args.dataset_shift = True
     args.threshold = 0 # do not add random noise to data
+    args.variations = 1 # for dataset shift, no "variations"
 
     args = parser_utils.process_args_nn(args)
     

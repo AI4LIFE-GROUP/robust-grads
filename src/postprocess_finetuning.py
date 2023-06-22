@@ -106,7 +106,7 @@ def main(args):
     for run_id in args.run_id:
         params = collect_params(args.filebase, run_id)
         dataset, threshold, adversarial = params[0], params[1], params[2]
-        n = int(params[6]) # n = num variations
+        base_repeats = int(params[5])
         activation = params[7]
         lr, lr_decay, weight_decay = params[8], params[9], params[10]
         nodes_per_layer, num_layers = params[12], params[13]
@@ -136,7 +136,7 @@ def main(args):
                 filename_ft_full = get_filename(filebase, run_id,  ft_epoch, full=1, finetune=True)
 
             
-                new_res = [dataset, 0, epoch, ft_epoch, threshold, adversarial, 1, n, activation, lr, lr_decay, weight_decay,
+                new_res = [dataset, 0, epoch, ft_epoch, threshold, adversarial, 1, base_repeats, activation, lr, lr_decay, weight_decay,
                             nodes_per_layer, num_layers, epsilon, beta, params[16]] # 16 columns
 
                 # add accuracy metrics
@@ -151,9 +151,8 @@ def main(args):
                 for tar in targets: # 4 columns
                     new_res.append(tar[0][-1]) # just add the final loss
 
-                print("filename is ",filename_base," and ft is ",filename_ft, " and base fulli s ", filename_base_full, " and ft full is ", filename_ft_full)
-                new_res.extend(add_tops(filename_base, filename_ft, n))
-                new_res.extend(add_tops(filename_base_full, filename_ft_full, n))
+                new_res.extend(add_tops(filename_base, filename_ft, base_repeats))
+                new_res.extend(add_tops(filename_base_full, filename_ft_full, base_repeats))
                 all_res.append(new_res)
     df = pd.DataFrame(all_res,columns=columns)
     df.to_csv(args.outputfile + ".csv", index=False)
